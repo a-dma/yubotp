@@ -1,0 +1,105 @@
+* Yubotp
+
+Yubotp is a Slack application that will validate Yubico OTPs that are
+sent in a message.
+
+Have you ever accidentally brushed your hand against the YubiKey in
+your laptop and saw it type a bunch of characters in the Slack message
+box? Have you ever seen that happen to one of your colleagues/friends
+and felt the urge to make fun of them? Now you don't have to! Thanks
+to Yubotp it will all happen automatically. All you have to do is
+install the application, add a few witty remarks in the configuration
+file and wait for your next victim.
+
+** Setup
+
+This is not a multi-tenant application so you will have to manually
+run it somewhere and configure it in your Slack Workspace.
+
+*** Slack Setup
+
+Start by creating [[https://api.slack.com/apps/new][a new app]], choose a name and your Workspace. Record
+the Signing Secret in the Basic Information menu.
+
+Add a bot user, give it a display name and a default username.
+
+Go to OAuth & Permissions and install the App to the Workspace.
+Record the Bot User OAuth Access Token.
+
+Go to Event Subscriptions and enable events. If you already know the
+URL where your app will be running at, add it now, otherwise leave
+this for later.
+
+Subscribe the bot user to the [[https://api.slack.com/events/message.channels][message.channels]] event.
+
+*** Yubicloud Setup
+
+Obtain an [[https://upgrade.yubico.com/getapikey/][API key]] for the Yubicloud and record both the Client ID and
+the API key itself.
+
+*** Deploy the Application
+
+Deploy the application to your favorite service. Heroku is a good one
+and the free tier works fine, there is an example ~Procfile~ in the
+project. Keep in mind that to deploy Rust to Heroku you will need a
+third-party buildpack.
+
+Edit the configuration file and fill in the Slack bot token, the Slack
+signing secret, and the Yubicloud Client ID and API key. Those values
+can also be specified through the following environment variables:
+~YUBOTP_SLACK_BOTTOKEN~, ~YUBOTP_SLACK_SIGNINGSECRET~,
+~YUBOTP_OTPVALIDATION_CLIENTID~, ~YUBOTP_OTPVALIDATION_APIKEY~.
+
+Now is a good time to also configure the possible replies. The
+~success~ list is used for valid OTPs, the ~replayed~ list is used for
+replayed OTPs. The messages can contain the special sequence ~$u~
+which will be replaced with the name of the user who sent the message
+containing the OTP.
+
+Start the application.
+
+*** Back to Slack
+
+Go back to the Event Subscriptions page on Slack and add the URL of
+your application. If you used Heroku it will be something like
+~https://yourchosenname.herokuapp.com~. Make sure it successfully
+verifies.
+
+Everything is now ready. Invite the bot user to a channel and start
+sending OTPs.
+
+** Privacy Concerns
+
+The bot user added to this application very closely resembles a
+regular Slack user. Specifically this means that the bot user will
+receive all the messages sent in the channels to which it has been
+invited. The bot will only react to messages ending with a Yubico OTP.
+
+Depending on the logging level at which the application is running,
+messages that trigger an OTP validation request towards the
+Yubicloud can be logged. Make sure you understand the implications and
+that your threat model considers this acceptable.
+
+The source code can be consulted to verify the above claims.
+
+** Build and Development
+
+Install a working Rust toolchain (using [[https://rustup.sh][rustup ]]is recommended) and
+simply run `cargo build` for a debug build or `cargo build --release`
+for a release build.
+
+** LICENSE
+
+Copyright 2019
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

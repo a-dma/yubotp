@@ -1,0 +1,31 @@
+#[server]
+#address = "0.0.0.0"
+#port = 8080
+
+[slack]
+bottoken = ""
+signingsecret = ""
+
+[otpvalidation]
+apihost = "xxxx"
+apikey = "yyyy"
+clientid = "1234"
+
+[answers]
+success = [
+  "You're cool $u",
+  "You know you can disable carriage return, right?",
+  "Did you know that you can have OTPs in slot 2 with a long touch?",
+  "Ccccccongratulations!",
+  "Access not granted, please use the Blue Key",
+  "Fine... I'll validate that for you... Done!",
+  "Yup, the Yubicloud is still up, thanks for checking",
+  "Don't worry $u, I won't tell anybody that you accidentally touched your YubiKey"
+]
+
+replayed = [
+  "It's an OTP alright, but somebody validated that before me",
+  "I've seen that before",
+  "Revenge of the OTP",
+  "The \"OT\" stands for \"One Time\""
+]
