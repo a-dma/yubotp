@@ -26,3 +26,4 @@ bytes = "0.4.10"
 
 [dependencies.actix-web]
 version = "1.0.0"
+features = ["ssl"]
