@@ -15,7 +15,7 @@ use crypto::sha1::Sha1;
 
 use futures::future::Future;
 
-use actix_web::HttpMessage;
+use actix_web::client::Client;
 
 lazy_static! {
     static ref CAPTURE_OTP_RE: Regex = Regex::new("([cbdefghijklnrtuv]{44})$").unwrap(); // This can also be {32,64}
@@ -130,18 +130,18 @@ impl OtpValidator {
         otp: &str,
         nonce: &str,
     ) -> impl Future<Item = std::result::Result<DecryptedOtp, OtpError>, Error = Error> {
+        let client = Client::default();
         let query_string = format!(
             "{}?timestamp=1&id={}&nonce={}&otp={}",
             api, self.client_id, nonce, otp
         );
 
         let api_key = self.api_key.clone();
-        client::get(query_string)
-            .finish()
-            .unwrap()
+        client
+            .get(query_string)
             .send()
             .map_err(Error::from)
-            .and_then(|res| res.body().from_err())
+            .and_then(|mut res| res.body().from_err())
             .and_then(move |response| {
                 let s = String::from_utf8(response.to_vec()).unwrap();
                 let mut h = String::new();

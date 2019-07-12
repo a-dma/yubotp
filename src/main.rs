@@ -3,7 +3,9 @@ use serde_json;
 
 use log::{debug, error};
 
+use actix_web::client::Client;
 use actix_web::error::ErrorBadRequest;
+use actix_web::web::Data;
 use actix_web::*;
 use futures::Future;
 
@@ -108,119 +110,118 @@ fn parse_from_json(data: &[u8]) -> Result<Event, Error> {
 }
 
 fn handle_req(
-    req: &HttpRequest<Arc<ValidatorApp>>,
+    bytes: web::Bytes,
+    req: HttpRequest,
+    s: Data<Arc<ValidatorApp>>,
 ) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
-    let state = req.state().clone();
     let headers = req.headers().clone();
 
-    let signing_secret = state.slack_signing_secret.to_owned();
+    let signing_secret = &s.slack_signing_secret.to_owned();
 
-    req.body()
-        .from_err()
-        .and_then(move |bytes| {
-            if cfg!(debug_assertions) {
-                debug!("Debug mode, skipping signature check");
-                return into_box_dyn(parse_from_json(&bytes));
-            }
-
-            let req_timestamp = match headers.get("X-Slack-Request-Timestamp") {
-                Some(header) => header,
-                None => {
-                    debug!("Unable to extract timestamp header");
-                    return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
-                }
-            };
-            let req_signature = match headers.get("X-Slack-Signature") {
-                Some(header) => header,
-                None => {
-                    debug!("Unable to extract signature header");
-                    return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
-                }
-            };
-
-            let req_signature = match req_signature.to_str() {
-                Ok(s) => s,
-                Err(_) => {
-                    debug!("Unable to convert signature header to string");
-                    return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
-                }
-            };
-
-            if !req_signature.starts_with("v0=") {
-                debug!("Malformed Slack signature");
+    if cfg!(debug_assertions) {
+        debug!("Debug mode, skipping signature check");
+    } else {
+        let req_timestamp = match headers.get("X-Slack-Request-Timestamp") {
+            Some(header) => header,
+            None => {
+                debug!("Unable to extract timestamp header");
                 return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
             }
-
-            let req_signature = hex::decode(&req_signature[3..]).unwrap();
-            let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
-            hmac.input(b"v0:");
-            hmac.input(req_timestamp.as_bytes());
-            hmac.input(b":");
-            hmac.input(&bytes);
-
-            let res = hmac.result();
-            if res.code() != &*req_signature {
-                debug!("Wrong Slack signature");
+        };
+        let req_signature = match headers.get("X-Slack-Signature") {
+            Some(header) => header,
+            None => {
+                debug!("Unable to extract signature header");
                 return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
             }
+        };
 
-            into_box_dyn(parse_from_json(&bytes))
-        })
-        .and_then(move |event: Event| match event {
-            Event::Chal(c) => into_box_dyn(Ok(HttpResponse::Ok().json(Response::Chal(
-                ChallengeResponse {
-                    challenge: c.challenge,
-                },
-            )))),
+        let req_signature = match req_signature.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                debug!("Unable to convert signature header to string");
+                return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+            }
+        };
 
-            Event::Msg(m) => {
-                let otp = match otp::extract_otp(&m.event.text) {
-                    Some(otp) => otp,
-                    None => {
-                        return into_box_dyn(Ok(HttpResponse::Ok().json(ok_resp())))
-                            as Box<dyn Future<Item = _, Error = _>>;
-                    }
-                };
+        if !req_signature.starts_with("v0=") {
+            debug!("Malformed Slack signature");
+            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+        }
 
-                debug!("Found otp: {:?}", otp);
+        let req_signature = hex::decode(&req_signature[3..]).unwrap();
+        let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
+        hmac.input(b"v0:");
+        hmac.input(req_timestamp.as_bytes());
+        hmac.input(b":");
+        hmac.input(&bytes);
 
-                let tok = format!("Bearer {}", state.slack_bot_token);
+        let res = hmac.result();
+        if res.code() != &*req_signature {
+            debug!("Wrong Slack signature");
+            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+        }
+    }
 
-                let fut = state
-                    .validator
-                    .validate_otp(&otp)
-                    .and_then(move |decrypted_otp| {
-                        debug!("Decrypted OTP: {:?}", decrypted_otp);
-                        let mut rng = thread_rng();
-                        let text = rng
-                            .choose(match decrypted_otp {
-                                Ok(_) => &state.success,
-                                Err(OtpError::ReplayedOtp) => &state.replayed,
-                                Err(e) => {
-                                    return Err(actix_web::error::ErrorBadRequest(e));
-                                }
+    let f =
+        futures::future::result(parse_from_json(&bytes)).and_then(
+            move |event: Event| match event {
+                Event::Chal(c) => into_box_dyn(Ok(HttpResponse::Ok().json(Response::Chal(
+                    ChallengeResponse {
+                        challenge: c.challenge,
+                    },
+                )))),
+
+                Event::Msg(m) => {
+                    let otp = match otp::extract_otp(&m.event.text) {
+                        Some(otp) => otp,
+                        None => {
+                            return into_box_dyn(Ok(HttpResponse::Ok().json(ok_resp())));
+                        }
+                    };
+
+                    debug!("Found otp: {:?}", otp);
+
+                    let tok = format!("Bearer {}", &s.slack_bot_token);
+
+                    let fut = s
+                        .validator
+                        .validate_otp(&otp)
+                        .and_then(move |decrypted_otp| {
+                            debug!("Decrypted OTP: {:?}", decrypted_otp);
+                            let mut rng = thread_rng();
+                            let text = rng
+                                .choose(match decrypted_otp {
+                                    Ok(_) => &s.success,
+                                    Err(OtpError::ReplayedOtp) => &s.replayed,
+                                    Err(e) => {
+                                        return Err(actix_web::error::ErrorBadRequest(e));
+                                    }
+                                })
+                                .unwrap()
+                                .replace("$u", &format!("<@{}>", m.event.user));
+                            Ok(Reply {
+                                channel: m.event.channel,
+                                text,
                             })
-                            .unwrap()
-                            .replace("$u", &format!("<@{}>", m.event.user));
-                        Ok(Reply {
-                            channel: m.event.channel,
-                            text,
                         })
-                    })
-                    .and_then(|reply| {
-                        client::post(SLACK_POST_MESSAGE_ENDPOINT)
-                            .header("Authorization", tok)
-                            .json(&reply)
-                            .unwrap()
-                            .send()
-                            .map_err(error::Error::from)
-                    })
-                    .and_then(|_| Ok(HttpResponse::Ok().json(ok_resp())));
+                        .and_then(|reply| {
+                            let client = Client::default();
 
-                Box::new(fut) as Box<dyn Future<Item = _, Error = _>>
-            }
-        })
-        .responder()
+                            client
+                                .post(SLACK_POST_MESSAGE_ENDPOINT)
+                                .header("Authorization", tok)
+                                .send_json(&reply)
+                                .map_err(error::Error::from)
+                        })
+                        .and_then(|_| Ok(HttpResponse::Ok().json(ok_resp())));
+
+                    Box::new(fut) as Box<dyn Future<Item = _, Error = _>>
+                }
+            },
+        );
+
+    Box::new(f)
 }
 
 fn main() {
@@ -263,14 +264,15 @@ fn main() {
         replayed: settings.answers.replayed,
     });
 
-    server::new(move || {
-        App::with_state(Arc::clone(&vapp))
-            .resource("/", |r| r.method(http::Method::POST).f(handle_req))
-            .finish()
+    HttpServer::new(move || {
+        App::new()
+            .data(Arc::clone(&vapp))
+            .service(web::resource("/").route(web::post().to_async(handle_req)))
     })
     .bind(format!("{}:{}", address, port))
     .unwrap()
-    .run();
+    .run()
+    .unwrap();
 }
 
 fn ok_resp() -> Response {

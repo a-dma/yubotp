@@ -25,5 +25,4 @@ bytes = "0.4.10"
 
 
 [dependencies.actix-web]
-version = "0.7.13"
-features = ["tls"]
+version = "1.0.0"
