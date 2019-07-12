@@ -62,6 +62,7 @@ struct Message {
     user: String,
     text: String,
     ts: String,
+    thread_ts: Option<String>,
     event_ts: String,
     channel_type: String,
     client_msg_id: String,
@@ -96,6 +97,7 @@ enum Response {
 struct Reply {
     channel: String,
     text: String,
+    thread_ts: Option<String>,
 }
 
 fn into_box_dyn<T>(e: Result<T, Error>) -> Box<dyn Future<Item = T, Error = Error>>
@@ -203,6 +205,7 @@ fn handle_req(
                             Ok(Reply {
                                 channel: m.event.channel,
                                 text,
+                                thread_ts: m.event.thread_ts,
                             })
                         })
                         .and_then(|reply| {
