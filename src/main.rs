@@ -271,6 +271,7 @@ fn main() {
         App::new()
             .data(Arc::clone(&vapp))
             .service(web::resource("/").route(web::post().to_async(handle_req)))
+            .service(web::resource("/health").route(web::get().to(|| "OK")))
     })
     .bind(format!("{}:{}", address, port))
     .unwrap()
