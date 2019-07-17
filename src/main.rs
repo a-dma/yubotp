@@ -100,6 +100,22 @@ struct Reply {
     thread_ts: Option<String>,
 }
 
+fn slack_escape_text(text: &String) -> String {
+    // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
+    let mut s = String::with_capacity(2 * text.len());
+
+    for c in text.chars() {
+        match c {
+            '<' => s.push_str("&lt;"),
+            '>' => s.push_str("&gt;"),
+            '&' => s.push_str("&amp;"),
+            _ => s.push(c),
+        };
+    }
+
+    s
+}
+
 fn into_box_dyn<T>(e: Result<T, Error>) -> Box<dyn Future<Item = T, Error = Error>>
 where
     T: 'static,
@@ -200,11 +216,14 @@ fn handle_req(
                                         return Err(actix_web::error::ErrorBadRequest(e));
                                     }
                                 })
-                                .unwrap()
+                                .unwrap();
+
+                            let esc_text = slack_escape_text(text)
                                 .replace("$u", &format!("<@{}>", m.event.user));
+
                             Ok(Reply {
                                 channel: m.event.channel,
-                                text,
+                                text: esc_text,
                                 thread_ts: m.event.thread_ts,
                             })
                         })
