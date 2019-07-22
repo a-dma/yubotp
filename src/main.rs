@@ -92,7 +92,6 @@ struct ChallengeResponse {
 #[serde(untagged)]
 enum Response {
     Chal(ChallengeResponse),
-    Simple(String),
 }
 
 #[derive(Debug, Serialize)]
@@ -145,14 +144,14 @@ fn handle_req(
             Some(header) => header,
             None => {
                 debug!("Unable to extract timestamp header");
-                return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
             }
         };
         let req_signature = match headers.get("X-Slack-Signature") {
             Some(header) => header,
             None => {
                 debug!("Unable to extract signature header");
-                return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
             }
         };
 
@@ -160,20 +159,20 @@ fn handle_req(
             Ok(s) => s,
             Err(_) => {
                 debug!("Unable to convert signature header to string");
-                return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
             }
         };
 
         if !req_signature.starts_with("v0=") {
             debug!("Malformed Slack signature");
-            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
         }
 
         let req_signature = if let Ok(sig) = hex::decode(&req_signature[3..]) {
             sig
         } else {
             debug!("Non decodable hex string in signature header");
-            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
         };
 
         let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
@@ -185,7 +184,7 @@ fn handle_req(
         let res = hmac.result();
         if res.code() != &*req_signature {
             debug!("Wrong Slack signature");
-            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
         }
     }
 
@@ -202,7 +201,7 @@ fn handle_req(
                     let otp = match otp::extract_otp(&m.event.text) {
                         Some(otp) => otp,
                         None => {
-                            return into_box_dyn(Ok(HttpResponse::Ok().json(ok_resp())));
+                            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
                         }
                     };
 
@@ -244,7 +243,8 @@ fn handle_req(
                                 .send_json(&reply)
                                 .map_err(error::Error::from)
                         })
-                        .and_then(|_| Ok(HttpResponse::Ok().json(ok_resp())));
+                        .and_then(|_| Ok(HttpResponse::Ok().finish()))
+                        .or_else(|_| Ok(HttpResponse::Ok().finish()));
 
                     Box::new(fut) as Box<dyn Future<Item = _, Error = _>>
                 }
@@ -302,8 +302,4 @@ fn main() -> Result<(), io::Error> {
     })
     .bind(format!("{}:{}", address, port))?
     .run()
-}
-
-fn ok_resp() -> Response {
-    Response::Simple("OK".to_string())
 }
