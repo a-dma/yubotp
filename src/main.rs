@@ -1,3 +1,5 @@
+use std::io;
+
 use serde_derive::{Deserialize, Serialize};
 use serde_json;
 
@@ -246,7 +248,7 @@ fn handle_req(
     Box::new(f)
 }
 
-fn main() {
+fn main() -> Result<(), io::Error> {
     env_logger::Builder::new()
         .parse(&std::env::var("YUBOTP_LOG").unwrap_or_default())
         .init();
@@ -292,10 +294,8 @@ fn main() {
             .service(web::resource("/").route(web::post().to_async(handle_req)))
             .service(web::resource("/health").route(web::get().to(|| "OK")))
     })
-    .bind(format!("{}:{}", address, port))
-    .unwrap()
+    .bind(format!("{}:{}", address, port))?
     .run()
-    .unwrap();
 }
 
 fn ok_resp() -> Response {
