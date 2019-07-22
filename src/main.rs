@@ -169,7 +169,13 @@ fn handle_req(
             return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
         }
 
-        let req_signature = hex::decode(&req_signature[3..]).unwrap();
+        let req_signature = if let Ok(sig) = hex::decode(&req_signature[3..]) {
+            sig
+        } else {
+            debug!("Non decodable hex string in signature header");
+            return into_box_dyn(Err(ErrorBadRequest("Bad request".to_string())));
+        };
+
         let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
         hmac.input(b"v0:");
         hmac.input(req_timestamp.as_bytes());
