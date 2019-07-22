@@ -297,6 +297,7 @@ fn main() -> Result<(), io::Error> {
     HttpServer::new(move || {
         App::new()
             .data(Arc::clone(&vapp))
+            .wrap(middleware::Logger::default())
             .service(web::resource("/").route(web::post().to_async(handle_req)))
             .service(web::resource("/health").route(web::get().to(|| "OK")))
     })
