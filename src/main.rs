@@ -198,7 +198,7 @@ fn handle_req(
                 )))),
 
                 Event::Msg(m) => {
-                    let otp = match otp::extract_otp(&m.event.text) {
+                    let mut otp = match otp::extract_otp(&m.event.text) {
                         Some(otp) => otp,
                         None => {
                             return into_box_dyn(Ok(HttpResponse::Ok().finish()));
@@ -206,6 +206,10 @@ fn handle_req(
                     };
 
                     debug!("Found otp: {:?}", otp);
+                    if otp.len() == 43 && otp.starts_with('c') {
+                        otp.insert(0, 'c');
+                        debug!("Otp received is 43 chars long, prepending 'c'");
+                    }
 
                     let tok = format!("Bearer {}", &s.slack_bot_token);
 

@@ -18,7 +18,7 @@ use futures::future::Future;
 use actix_web::client::Client;
 
 lazy_static! {
-    static ref CAPTURE_OTP_RE: Regex = Regex::new("([cbdefghijklnrtuv]{44})$").unwrap(); // This can also be {32,64}
+    static ref CAPTURE_OTP_RE: Regex = Regex::new("([cbdefghijklnrtuv]{43,44})$").unwrap(); // This can also be {32,64}
 }
 
 lazy_static! {
