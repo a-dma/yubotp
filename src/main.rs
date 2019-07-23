@@ -94,13 +94,6 @@ enum Response {
     Chal(ChallengeResponse),
 }
 
-#[derive(Debug, Serialize)]
-struct Reply {
-    channel: String,
-    text: String,
-    thread_ts: Option<String>,
-}
-
 fn slack_escape_text(text: &String) -> String {
     // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
     let mut s = String::with_capacity(2 * text.len());
@@ -232,11 +225,29 @@ fn handle_req(
                             let esc_text = slack_escape_text(text)
                                 .replace("$u", &format!("<@{}>", m.event.user));
 
-                            Ok(Reply {
-                                channel: m.event.channel,
-                                text: esc_text,
-                                thread_ts: m.event.thread_ts,
-                            })
+                            let json = serde_json::json!({
+                                "channel": m.event.channel,
+                                "thread_ts": m.event.thread_ts,
+                                "blocks": [
+                                    {
+                                        "type": "section",
+                                        "text": {
+                                            "type": "mrkdwn",
+                                            "text": esc_text
+                                        }
+                                    },
+                                    {
+                                        "type": "context",
+                                        "elements": [
+                                            {
+                                                "type": "mrkdwn",
+                                                "text": "_The OTP has been consumed._"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            });
+                            Ok(json)
                         })
                         .and_then(|reply| {
                             let client = Client::default();
