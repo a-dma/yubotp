@@ -49,17 +49,19 @@ impl fmt::Display for OtpValidation {
 pub struct Answer {
     pub success: Vec<String>,
     pub replayed: Vec<String>,
+    pub explanation: String
 }
 
 impl fmt::Display for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Answer (success: {:?}, replayed: {:?})",
-            self.success, self.replayed
+            "Answer (success: {:?}, replayed: {:?}, explanation: {:?})",
+            self.success, self.replayed, self.explanation
         )
     }
 }
+
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
@@ -99,6 +101,7 @@ impl Settings {
 
         s.set_default("answers.success", vec!["Success"])?;
         s.set_default("answers.replayed", vec!["Replayed"])?;
+        s.set_default("answers.explanation", "_The OTP has been consumed._")?;
 
         s.merge(File::with_name(&file))?;
 

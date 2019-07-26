@@ -39,6 +39,7 @@ struct ValidatorApp {
     slack_signing_secret: String,
     success: Vec<String>,
     replayed: Vec<String>,
+    explanation: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -241,7 +242,7 @@ fn handle_req(
                                         "elements": [
                                             {
                                                 "type": "mrkdwn",
-                                                "text": "_The OTP has been consumed._"
+                                                "text": &s.explanation
                                             }
                                         ]
                                     }
@@ -307,6 +308,7 @@ fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
+        explanation: settings.answers.explanation
     });
 
     HttpServer::new(move || {
