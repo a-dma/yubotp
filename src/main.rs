@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::io;
 
 use serde_derive::{Deserialize, Serialize};
@@ -38,6 +39,10 @@ lazy_static! {
 }
 lazy_static! {
     static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
+}
+
+lazy_static! {
+    static ref START_END_OTP_RE: Regex = Regex::new("(.{4,4}).+(.{4,4})$").unwrap();
 }
 
 struct ValidatorApp {
@@ -117,6 +122,19 @@ fn slack_escape_text(text: &String) -> String {
     }
 
     s
+}
+
+/// Shortens an OTP to its first and last four letters with dots in between.
+/// It assumes the `otp` parameter is a valid OTP (44 characters long).
+fn shorten_otp(otp: &String) -> String {
+    let mut ret = String::with_capacity(13);
+
+    let caps = START_END_OTP_RE.captures(otp).unwrap();
+    ret.push_str(&caps.get(1).unwrap().as_str());
+    ret.push_str("...");
+    ret.push_str(&caps.get(2).unwrap().as_str());
+
+    ret
 }
 
 fn into_box_dyn<T>(e: Result<T, Error>) -> Box<dyn Future<Item = T, Error = Error>>
@@ -237,9 +255,13 @@ fn handle_req(
                                 }
                             }
 
-                            let esc_text = slack_escape_text(&text.replace("$o", &otp))
-                                .replace("$u", &format!("<@{}>", m.event.user));
-                            let explanation = &explanation.replace("$o", &otp);
+                            let esc_text = slack_escape_text(
+                                &text.replace("$o", &otp).replace("$O", &shorten_otp(&otp)),
+                            )
+                            .replace("$u", &format!("<@{}>", m.event.user));
+                            let explanation = &explanation
+                                .replace("$o", &otp)
+                                .replace("$O", &shorten_otp(&otp));
 
                             let json = serde_json::json!({
                                 "channel": m.event.channel,
