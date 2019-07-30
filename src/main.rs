@@ -242,7 +242,7 @@ fn handle_req(
                                         "elements": [
                                             {
                                                 "type": "mrkdwn",
-                                                "text": &s.explanation
+                                                "text": slack_escape_text(&s.explanation)
                                             }
                                         ]
                                     }
