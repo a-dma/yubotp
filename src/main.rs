@@ -137,6 +137,12 @@ fn shorten_otp(otp: &String) -> String {
     ret
 }
 
+/// Replaces the special dollar syntax and escapes the message
+fn prepare_slack_message(text: &String, otp: &String, user: &String) -> String {
+    slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
+        .replace("$u", &format!("<@{}>", user))
+}
+
 fn into_box_dyn<T>(e: Result<T, Error>) -> Box<dyn Future<Item = T, Error = Error>>
 where
     T: 'static,
@@ -255,13 +261,9 @@ fn handle_req(
                                 }
                             }
 
-                            let esc_text = slack_escape_text(
-                                &text.replace("$o", &otp).replace("$O", &shorten_otp(&otp)),
-                            )
-                            .replace("$u", &format!("<@{}>", m.event.user));
-                            let explanation = &explanation
-                                .replace("$o", &otp)
-                                .replace("$O", &shorten_otp(&otp));
+                            let esc_text = prepare_slack_message(text, &otp, &m.event.user);
+                            let explanation =
+                                prepare_slack_message(&explanation, &otp, &m.event.user);
 
                             let json = serde_json::json!({
                                 "channel": m.event.channel,
@@ -279,7 +281,7 @@ fn handle_req(
                                         "elements": [
                                             {
                                                 "type": "mrkdwn",
-                                                "text": slack_escape_text(explanation)
+                                                "text": &explanation
                                             }
                                         ]
                                     }
