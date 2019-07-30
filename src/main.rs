@@ -15,6 +15,7 @@ use crypto::hmac::Hmac;
 use crypto::mac::Mac;
 use crypto::sha2::Sha256;
 
+use lazy_static::lazy_static;
 use rand::{thread_rng, Rng};
 
 use hex;
@@ -32,6 +33,12 @@ use settings::Settings;
 static EXIT_FAILURE: i32 = 1;
 
 static SLACK_POST_MESSAGE_ENDPOINT: &str = "https://slack.com/api/chat.postMessage";
+lazy_static! {
+    static ref SUCCESS_TEXT: String = String::from("OTP validated");
+}
+lazy_static! {
+    static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
+}
 
 struct ValidatorApp {
     validator: otp::OtpValidator,
@@ -218,11 +225,11 @@ fn handle_req(
                             let explanation;
                             match decrypted_otp {
                                 Ok(_) => {
-                                    text = rng.choose(&s.success).unwrap();
+                                    text = rng.choose(&s.success).unwrap_or(&SUCCESS_TEXT);
                                     explanation = &s.success_explanation;
                                 }
                                 Err(OtpError::ReplayedOtp) => {
-                                    text = rng.choose(&s.replayed).unwrap();
+                                    text = rng.choose(&s.replayed).unwrap_or(&REPLAYED_TEXT);
                                     explanation = &s.replayed_explanation;
                                 }
                                 Err(e) => {
