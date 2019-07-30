@@ -39,7 +39,8 @@ struct ValidatorApp {
     slack_signing_secret: String,
     success: Vec<String>,
     replayed: Vec<String>,
-    explanation: String,
+    success_explanation: String,
+    replayed_explanation: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,15 +214,21 @@ fn handle_req(
                         .and_then(move |decrypted_otp| {
                             debug!("Decrypted OTP: {:?}", decrypted_otp);
                             let mut rng = thread_rng();
-                            let text = rng
-                                .choose(match decrypted_otp {
-                                    Ok(_) => &s.success,
-                                    Err(OtpError::ReplayedOtp) => &s.replayed,
-                                    Err(e) => {
-                                        return Err(actix_web::error::ErrorBadRequest(e));
-                                    }
-                                })
-                                .unwrap();
+                            let text;
+                            let explanation;
+                            match decrypted_otp {
+                                Ok(_) => {
+                                    text = rng.choose(&s.success).unwrap();
+                                    explanation = &s.success_explanation;
+                                }
+                                Err(OtpError::ReplayedOtp) => {
+                                    text = rng.choose(&s.replayed).unwrap();
+                                    explanation = &s.replayed_explanation;
+                                }
+                                Err(e) => {
+                                    return Err(actix_web::error::ErrorBadRequest(e));
+                                }
+                            }
 
                             let esc_text = slack_escape_text(text)
                                 .replace("$u", &format!("<@{}>", m.event.user));
@@ -242,7 +249,7 @@ fn handle_req(
                                         "elements": [
                                             {
                                                 "type": "mrkdwn",
-                                                "text": slack_escape_text(&s.explanation)
+                                                "text": slack_escape_text(explanation)
                                             }
                                         ]
                                     }
@@ -308,7 +315,8 @@ fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
-        explanation: settings.answers.explanation
+        success_explanation: settings.answers.success_explanation,
+        replayed_explanation: settings.answers.replayed_explanation,
     });
 
     HttpServer::new(move || {
