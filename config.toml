@@ -30,5 +30,6 @@ replayed = [
   "The \"OT\" stands for \"One Time\""
 ]
 
-success_explanation = "_The OTP has been consumed._"
-replayed_explanation = "_Replayed OTP, it has already been consumed._"
+[explanation]
+success = "_The OTP has been consumed._"
+replayed = "_Replayed OTP, it has already been consumed._"

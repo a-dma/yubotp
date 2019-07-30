@@ -49,16 +49,30 @@ impl fmt::Display for OtpValidation {
 pub struct Answer {
     pub success: Vec<String>,
     pub replayed: Vec<String>,
-    pub success_explanation: String,
-    pub replayed_explanation: String,
 }
 
 impl fmt::Display for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Answer (success: {:?}, replayed: {:?}, success_explanation: {:?}, replayed_explanation: {:?})",
-            self.success, self.replayed, self.success_explanation, self.replayed_explanation
+            "Answer (success: {:?}, replayed: {:?})",
+            self.success, self.replayed
+        )
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct Explanation {
+    pub success: String,
+    pub replayed: String,
+}
+
+impl fmt::Display for Explanation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Explanation (success: {:?}, replayed: {:?})",
+            self.success, self.replayed
         )
     }
 }
@@ -69,14 +83,15 @@ pub struct Settings {
     pub slack: Slack,
     pub otpvalidation: OtpValidation,
     pub answers: Answer,
+    pub explanation: Explanation,
 }
 
 impl fmt::Display for Settings {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Settings ({}, {}, {}, {})",
-            self.server, self.slack, self.otpvalidation, self.answers
+            "Settings ({}, {}, {}, {}, {})",
+            self.server, self.slack, self.otpvalidation, self.answers, self.explanation
         )
     }
 }
@@ -101,12 +116,9 @@ impl Settings {
 
         s.set_default("answers.success", vec!["Success"])?;
         s.set_default("answers.replayed", vec!["Replayed"])?;
+        s.set_default("explanation.success", "_The OTP has been consumed._")?;
         s.set_default(
-            "answers.success_explanation",
-            "_The OTP has been consumed._",
-        )?;
-        s.set_default(
-            "answers.success_explanation",
+            "explanation.replayed",
             "_Replayed OTP, it has already been consumed._",
         )?;
 

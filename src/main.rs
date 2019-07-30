@@ -323,8 +323,8 @@ fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
-        success_explanation: settings.answers.success_explanation,
-        replayed_explanation: settings.answers.replayed_explanation,
+        success_explanation: settings.explanation.success,
+        replayed_explanation: settings.explanation.replayed,
     });
 
     HttpServer::new(move || {
