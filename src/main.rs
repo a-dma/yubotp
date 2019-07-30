@@ -237,8 +237,9 @@ fn handle_req(
                                 }
                             }
 
-                            let esc_text = slack_escape_text(text)
+                            let esc_text = slack_escape_text(&text.replace("$o", &otp))
                                 .replace("$u", &format!("<@{}>", m.event.user));
+                            let explanation = &explanation.replace("$o", &otp);
 
                             let json = serde_json::json!({
                                 "channel": m.event.channel,
