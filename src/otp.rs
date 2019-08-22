@@ -1,5 +1,5 @@
 use actix_web::*;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 
 use serde_derive::Serialize;
 
@@ -18,7 +18,10 @@ use futures::future::Future;
 use actix_web::client::Client;
 
 lazy_static! {
-    static ref CAPTURE_OTP_RE: Regex = Regex::new("([cbdefghijklnrtuv]{43,44})$").unwrap(); // This can also be {32,64}
+    static ref CAPTURE_OTP_RE: Regex = RegexBuilder::new("([cbdefghijklnrtuv]{43,44})$")
+        .case_insensitive(true)
+        .build()
+        .unwrap();
 }
 
 lazy_static! {
