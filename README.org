@@ -85,7 +85,7 @@ The source code can be consulted to verify the above claims.
 ** Build and Development
 
 Install a working Rust toolchain (using [[https://rustup.rs][rustup]] is recommended) and
-simply run `cargo build` for a debug build or `cargo build --release`
+simply run ~cargo build~ for a debug build or ~cargo build --release~
 for a release build.
 
 ** LICENSE
