@@ -142,6 +142,61 @@ fn prepare_slack_message(text: &String, otp: &String, user: &String) -> String {
         .replace("$u", &format!("<@{}>", user))
 }
 
+/// Verifies the signature of the data received by Slack
+fn verify_signature(
+    ts: Option<&http::HeaderValue>,
+    sig: Option<&http::HeaderValue>,
+    signing_secret: &String,
+    bytes: &web::Bytes,
+) -> bool {
+    let req_timestamp = if let Some(timestamp) = ts {
+        timestamp
+    } else {
+        debug!("Unable to extract timestamp header");
+        return false;
+    };
+
+    let req_signature = if let Some(signature) = sig {
+        signature
+    } else {
+        debug!("Unable to extract signature header");
+        return false;
+    };
+
+    let req_signature = if let Ok(s) = req_signature.to_str() {
+        s
+    } else {
+        debug!("Unable to convert signature header to string");
+        return false;
+    };
+
+    if !req_signature.starts_with("v0=") {
+        debug!("Malformed Slack signature");
+        return false;
+    }
+
+    let req_signature = if let Ok(sig) = hex::decode(&req_signature[3..]) {
+        sig
+    } else {
+        debug!("Non decodable hex string in signature header");
+        return false;
+    };
+
+    let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
+    hmac.input(b"v0:");
+    hmac.input(req_timestamp.as_bytes());
+    hmac.input(b":");
+    hmac.input(&bytes);
+
+    let res = hmac.result();
+    if res.code() != &*req_signature {
+        debug!("Wrong Slack signature");
+        return false;
+    }
+
+    true
+}
+
 async fn handle_req(
     bytes: web::Bytes,
     req: HttpRequest,
@@ -154,50 +209,12 @@ async fn handle_req(
     if cfg!(debug_assertions) {
         debug!("Debug mode, skipping signature check");
     } else {
-        let req_timestamp = match headers.get("X-Slack-Request-Timestamp") {
-            Some(header) => header,
-            None => {
-                debug!("Unable to extract timestamp header");
-                return Ok(HttpResponse::Ok().finish());
-            }
-        };
-        let req_signature = match headers.get("X-Slack-Signature") {
-            Some(header) => header,
-            None => {
-                debug!("Unable to extract signature header");
-                return Ok(HttpResponse::Ok().finish());
-            }
-        };
-
-        let req_signature = match req_signature.to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                debug!("Unable to convert signature header to string");
-                return Ok(HttpResponse::Ok().finish());
-            }
-        };
-
-        if !req_signature.starts_with("v0=") {
-            debug!("Malformed Slack signature");
-            return Ok(HttpResponse::Ok().finish());
-        }
-
-        let req_signature = if let Ok(sig) = hex::decode(&req_signature[3..]) {
-            sig
-        } else {
-            debug!("Non decodable hex string in signature header");
-            return Ok(HttpResponse::Ok().finish());
-        };
-
-        let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
-        hmac.input(b"v0:");
-        hmac.input(req_timestamp.as_bytes());
-        hmac.input(b":");
-        hmac.input(&bytes);
-
-        let res = hmac.result();
-        if res.code() != &*req_signature {
-            debug!("Wrong Slack signature");
+        if !verify_signature(
+            headers.get("X-Slack-Request-Timestamp"),
+            headers.get("X-Slack-Signature"),
+            signing_secret,
+            &bytes,
+        ) {
             return Ok(HttpResponse::Ok().finish());
         }
     }
