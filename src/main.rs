@@ -310,9 +310,7 @@ fn handle_req(
 }
 
 fn main() -> Result<(), io::Error> {
-    env_logger::Builder::new()
-        .parse(&std::env::var("YUBOTP_LOG").unwrap_or_default())
-        .init();
+    env_logger::from_env("YUBOTP_LOG").init();
 
     let settings =
         match Settings::new(&std::env::var("YUBOTP_CFG").unwrap_or("config.toml".to_owned())) {
