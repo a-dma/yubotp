@@ -20,10 +20,8 @@ rust-crypto = "0.2.36"
 serde = "1.0.80"
 serde_derive = "1.0.80"
 serde_json = "1.0.32"
-futures = "0.1.25"
+futures = "0.3.1"
+futures-util = "0.3.1"
 bytes = "0.4.10"
-
-
-[dependencies.actix-web]
-version = "1.0.0"
-features = ["ssl"]
+actix-web = { version = "2.0.0", features = ["openssl"] }
+actix-rt = "1.0.0"

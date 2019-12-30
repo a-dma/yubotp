@@ -7,10 +7,8 @@ use serde_json;
 use log::{debug, error};
 
 use actix_web::client::Client;
-use actix_web::error::ErrorBadRequest;
 use actix_web::web::Data;
 use actix_web::*;
-use futures::Future;
 
 use crypto::hmac::Hmac;
 use crypto::mac::Mac;
@@ -144,22 +142,11 @@ fn prepare_slack_message(text: &String, otp: &String, user: &String) -> String {
         .replace("$u", &format!("<@{}>", user))
 }
 
-fn into_box_dyn<T>(e: Result<T, Error>) -> Box<dyn Future<Item = T, Error = Error>>
-where
-    T: 'static,
-{
-    Box::new(futures::future::result(e))
-}
-
-fn parse_from_json(data: &[u8]) -> Result<Event, Error> {
-    serde_json::from_slice(data).map_err(ErrorBadRequest)
-}
-
-fn handle_req(
+async fn handle_req(
     bytes: web::Bytes,
     req: HttpRequest,
     s: Data<Arc<ValidatorApp>>,
-) -> Box<dyn Future<Item = HttpResponse, Error = Error>> {
+) -> Result<HttpResponse, Error> {
     let headers = req.headers().clone();
 
     let signing_secret = &s.slack_signing_secret.to_owned();
@@ -171,14 +158,14 @@ fn handle_req(
             Some(header) => header,
             None => {
                 debug!("Unable to extract timestamp header");
-                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+                return Ok(HttpResponse::Ok().finish());
             }
         };
         let req_signature = match headers.get("X-Slack-Signature") {
             Some(header) => header,
             None => {
                 debug!("Unable to extract signature header");
-                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+                return Ok(HttpResponse::Ok().finish());
             }
         };
 
@@ -186,20 +173,20 @@ fn handle_req(
             Ok(s) => s,
             Err(_) => {
                 debug!("Unable to convert signature header to string");
-                return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+                return Ok(HttpResponse::Ok().finish());
             }
         };
 
         if !req_signature.starts_with("v0=") {
             debug!("Malformed Slack signature");
-            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+            return Ok(HttpResponse::Ok().finish());
         }
 
         let req_signature = if let Ok(sig) = hex::decode(&req_signature[3..]) {
             sig
         } else {
             debug!("Non decodable hex string in signature header");
-            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+            return Ok(HttpResponse::Ok().finish());
         };
 
         let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
@@ -211,111 +198,94 @@ fn handle_req(
         let res = hmac.result();
         if res.code() != &*req_signature {
             debug!("Wrong Slack signature");
-            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
+            return Ok(HttpResponse::Ok().finish());
         }
     }
 
-    let f =
-        futures::future::result(parse_from_json(&bytes)).and_then(
-            move |event: Event| match event {
-                Event::Chal(c) => into_box_dyn(Ok(HttpResponse::Ok().json(Response::Chal(
-                    ChallengeResponse {
-                        challenge: c.challenge,
-                    },
-                )))),
+    let event = serde_json::from_slice::<Event>(&bytes)?;
 
-                Event::Msg(m) => {
-                    let mut otp = match otp::extract_otp(&m.event.text) {
-                        Some(otp) => otp,
-                        None => {
-                            return into_box_dyn(Ok(HttpResponse::Ok().finish()));
-                        }
-                    };
+    match event {
+        Event::Chal(c) => Ok(HttpResponse::Ok().json(Response::Chal(ChallengeResponse {
+            challenge: c.challenge,
+        }))),
 
-                    debug!("Found otp: {:?}", otp);
-                    if otp.len() == 43 && otp.starts_with('c') {
-                        otp.insert(0, 'c');
-                        debug!("Otp received is 43 chars long, prepending 'c'");
-                    }
-
-                    let tok = format!("Bearer {}", &s.slack_bot_token);
-
-                    let fut = s
-                        .validator
-                        .validate_otp(&otp)
-                        .and_then(move |decrypted_otp| {
-                            debug!("Decrypted OTP: {:?}", decrypted_otp);
-                            let mut rng = thread_rng();
-                            let text;
-                            let explanation;
-                            match decrypted_otp {
-                                Ok(_) => {
-                                    text =
-                                        s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
-                                    explanation = &s.success_explanation;
-                                }
-                                Err(OtpError::ReplayedOtp) => {
-                                    text = s
-                                        .replayed
-                                        .iter()
-                                        .choose(&mut rng)
-                                        .unwrap_or(&REPLAYED_TEXT);
-                                    explanation = &s.replayed_explanation;
-                                }
-                                Err(e) => {
-                                    return Err(actix_web::error::ErrorBadRequest(e));
-                                }
-                            }
-
-                            let esc_text = prepare_slack_message(text, &otp, &m.event.user);
-                            let explanation =
-                                prepare_slack_message(&explanation, &otp, &m.event.user);
-
-                            let json = serde_json::json!({
-                                "channel": m.event.channel,
-                                "thread_ts": m.event.thread_ts,
-                                "blocks": [
-                                    {
-                                        "type": "section",
-                                        "text": {
-                                            "type": "mrkdwn",
-                                            "text": esc_text
-                                        }
-                                    },
-                                    {
-                                        "type": "context",
-                                        "elements": [
-                                            {
-                                                "type": "mrkdwn",
-                                                "text": &explanation
-                                            }
-                                        ]
-                                    }
-                                ]
-                            });
-                            Ok(json)
-                        })
-                        .and_then(|reply| {
-                            let client = Client::default();
-
-                            client
-                                .post(SLACK_POST_MESSAGE_ENDPOINT)
-                                .header("Authorization", tok)
-                                .send_json(&reply)
-                                .map_err(error::Error::from)
-                        })
-                        .and_then(|_| Ok(HttpResponse::Ok().finish()))
-                        .or_else(|_| Ok(HttpResponse::Ok().finish()));
-
-                    Box::new(fut) as Box<dyn Future<Item = _, Error = _>>
+        Event::Msg(m) => {
+            let mut otp = match otp::extract_otp(&m.event.text) {
+                Some(otp) => otp,
+                None => {
+                    return Ok(HttpResponse::Ok().finish());
                 }
-            },
-        );
+            };
 
-    Box::new(f)
+            debug!("Found otp: {:?}", otp);
+            if otp.len() == 43 && otp.starts_with('c') {
+                otp.insert(0, 'c');
+                debug!("Otp received is 43 chars long, prepending 'c'");
+            }
+
+            let tok = format!("Bearer {}", &s.slack_bot_token);
+
+            let decrypted_otp = s.validator.validate_otp(&otp).await?;
+
+            debug!("Decrypted OTP: {:?}", decrypted_otp);
+            let mut rng = thread_rng();
+            let text;
+            let explanation;
+            match decrypted_otp {
+                Ok(_) => {
+                    text = s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
+                    explanation = &s.success_explanation;
+                }
+                Err(OtpError::ReplayedOtp) => {
+                    text = s.replayed.iter().choose(&mut rng).unwrap_or(&REPLAYED_TEXT);
+                    explanation = &s.replayed_explanation;
+                }
+                Err(e) => {
+                    return Err(actix_web::error::ErrorBadRequest(e));
+                }
+            }
+
+            let esc_text = prepare_slack_message(text, &otp, &m.event.user);
+            let explanation = prepare_slack_message(&explanation, &otp, &m.event.user);
+
+            let reply = serde_json::json!({
+                "channel": m.event.channel,
+                "thread_ts": m.event.thread_ts,
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": esc_text
+                        }
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": &explanation
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            let client = Client::default();
+
+            client
+                .post(SLACK_POST_MESSAGE_ENDPOINT)
+                .header("Authorization", tok)
+                .send_json(&reply)
+                .await?;
+
+            Ok(HttpResponse::Ok().finish())
+        }
+    }
 }
 
-fn main() -> Result<(), io::Error> {
+#[actix_rt::main]
+async fn main() -> Result<(), io::Error> {
     env_logger::from_env("YUBOTP_LOG").init();
 
     let settings =
@@ -359,9 +329,12 @@ fn main() -> Result<(), io::Error> {
         App::new()
             .data(Arc::clone(&vapp))
             .wrap(middleware::Logger::default())
-            .service(web::resource("/").route(web::post().to_async(handle_req)))
-            .service(web::resource("/health").route(web::get().to(|| "OK")))
+            .service(web::resource("/").route(web::post().to(handle_req)))
+            .service(
+                web::resource("/health").route(web::get().to(|| HttpResponse::Ok().body("OK"))),
+            )
     })
     .bind(format!("{}:{}", address, port))?
     .run()
+    .await
 }

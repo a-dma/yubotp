@@ -13,7 +13,7 @@ use crypto::hmac::Hmac;
 use crypto::mac::Mac;
 use crypto::sha1::Sha1;
 
-use futures::future::Future;
+use futures_util::future::FutureExt;
 
 use actix_web::client::Client;
 
@@ -100,10 +100,10 @@ impl OtpValidator {
         }
     }
 
-    pub fn validate_otp(
+    pub async fn validate_otp(
         &self,
         otp: &str,
-    ) -> impl Future<Item = std::result::Result<DecryptedOtp, OtpError>, Error = Error> {
+    ) -> std::result::Result<std::result::Result<DecryptedOtp, OtpError>, Error> {
         let mut rng = thread_rng();
         let chars: String = iter::repeat(())
             .map(|()| rng.sample(Alphanumeric))
@@ -116,23 +116,27 @@ impl OtpValidator {
             .map(|x| self.validate_otp_internal(x, &otp, &chars))
             .collect::<Vec<_>>();
 
-        futures::future::join_all(v).map(|mut results| {
-            for i in 0..results.len() {
-                if results[i].is_ok() {
-                    return results.remove(i);
+        futures::future::join_all(v)
+            .map(|mut results| {
+                for i in 0..results.len() {
+                    if let Ok(res) = &results[i] {
+                        if res.is_ok() {
+                            return results.remove(i);
+                        }
+                    }
                 }
-            }
 
-            results.remove(0)
-        })
+                results.remove(0)
+            })
+            .await
     }
 
-    fn validate_otp_internal(
+    async fn validate_otp_internal(
         &self,
         api: &str,
         otp: &str,
         nonce: &str,
-    ) -> impl Future<Item = std::result::Result<DecryptedOtp, OtpError>, Error = Error> {
+    ) -> std::result::Result<std::result::Result<DecryptedOtp, OtpError>, Error> {
         let client = Client::default();
         let query_string = format!(
             "{}?timestamp=1&id={}&nonce={}&otp={}",
@@ -140,95 +144,89 @@ impl OtpValidator {
         );
 
         let api_key = self.api_key.clone();
-        client
-            .get(query_string)
-            .send()
-            .map_err(Error::from)
-            .and_then(|mut res| res.body().from_err())
-            .and_then(move |response| {
-                let s = String::from_utf8(response.to_vec()).unwrap();
-                let mut h = String::new();
-                let mut sorted_result = s
-                    .trim()
-                    .lines()
-                    .filter(|s| {
-                        if s.starts_with("h=") {
-                            h = s[2..].to_string();
-                            false
-                        } else {
-                            true
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                sorted_result.sort();
-                let message = sorted_result.join("&");
+        let mut raw_resp = client.get(query_string).send().await?;
+        let response = raw_resp.body().await?;
 
-                let mut hmac = Hmac::new(Sha1::new(), &api_key);
-                hmac.input(message.as_bytes());
-                let digest = hmac.result();
-                if h != base64::encode(digest.code()) {
-                    return futures::finished(Err(OtpError::BadSignature));
+        let s = String::from_utf8(response.to_vec()).unwrap();
+        let mut h = String::new();
+        let mut sorted_result = s
+            .trim()
+            .lines()
+            .filter(|s| {
+                if s.starts_with("h=") {
+                    h = s[2..].to_string();
+                    false
+                } else {
+                    true
                 }
-
-                let status = match CAPTURE_STATUS_RE
-                    .captures_iter(&s)
-                    .last()
-                    .and_then(|m| m.get(1))
-                {
-                    Some(s) => s.as_str(),
-                    None => unreachable!("Missing status in response"),
-                };
-
-                if status != "OK" {
-                    return match status {
-                        "BAD_OTP" => futures::finished(Err(OtpError::BadOtp)),
-                        "REPLAYED_OTP" => futures::finished(Err(OtpError::ReplayedOtp)),
-                        "BAD_SIGNATURE" => futures::finished(Err(OtpError::BadSignature)),
-                        "MISSING_PARAMETER" => futures::finished(Err(OtpError::MissingParameter)),
-                        "NO_SUCH_CLIENT" => futures::finished(Err(OtpError::NoSuchClient)),
-                        "OPERATION_NOT_ALLOWED" => {
-                            futures::finished(Err(OtpError::OperationNotAllowed))
-                        }
-                        "BACKEND_ERROR" => futures::finished(Err(OtpError::BackendError)),
-                        "NOT_ENOUGH_ANSWERS" => futures::finished(Err(OtpError::NotEnoughAnswers)),
-                        "REPLAYED_REQUEST" => futures::finished(Err(OtpError::ReplayedRequest)),
-                        _ => unreachable!("Unknown status"),
-                    };
-                }
-
-                let timestamp = match CAPTURE_TIMESTAMP_RE
-                    .captures_iter(&s)
-                    .last()
-                    .and_then(|m| m.get(1))
-                {
-                    Some(s) => s.as_str().parse().expect("Unable to parse timestamp"),
-                    None => unreachable!("Missing status in response"),
-                };
-
-                let session_ctr = match CAPTURE_SESSION_CTR_RE
-                    .captures_iter(&s)
-                    .last()
-                    .and_then(|m| m.get(1))
-                {
-                    Some(s) => s.as_str().parse().expect("Unable to parse sessioncounter"),
-                    None => unreachable!("Missing status in response"),
-                };
-
-                let session_use = match CAPTURE_SESSION_USE_RE
-                    .captures_iter(&s)
-                    .last()
-                    .and_then(|m| m.get(1))
-                {
-                    Some(s) => s.as_str().parse().expect("Unable to parse sessionuse"),
-                    None => unreachable!("Missing status in response"),
-                };
-
-                futures::finished(Ok(DecryptedOtp {
-                    timestamp,
-                    session_ctr,
-                    session_use,
-                }))
             })
+            .collect::<Vec<_>>();
+        sorted_result.sort();
+        let message = sorted_result.join("&");
+
+        let mut hmac = Hmac::new(Sha1::new(), &api_key);
+        hmac.input(message.as_bytes());
+        let digest = hmac.result();
+        if h != base64::encode(digest.code()) {
+            return Ok(Err(OtpError::BadSignature));
+        }
+
+        let status = match CAPTURE_STATUS_RE
+            .captures_iter(&s)
+            .last()
+            .and_then(|m| m.get(1))
+        {
+            Some(s) => s.as_str(),
+            None => unreachable!("Missing status in response"),
+        };
+
+        if status != "OK" {
+            return match status {
+                "BAD_OTP" => Ok(Err(OtpError::BadOtp)),
+                "REPLAYED_OTP" => Ok(Err(OtpError::ReplayedOtp)),
+                "BAD_SIGNATURE" => Ok(Err(OtpError::BadSignature)),
+                "MISSING_PARAMETER" => Ok(Err(OtpError::MissingParameter)),
+                "NO_SUCH_CLIENT" => Ok(Err(OtpError::NoSuchClient)),
+                "OPERATION_NOT_ALLOWED" => Ok(Err(OtpError::OperationNotAllowed)),
+                "BACKEND_ERROR" => Ok(Err(OtpError::BackendError)),
+                "NOT_ENOUGH_ANSWERS" => Ok(Err(OtpError::NotEnoughAnswers)),
+                "REPLAYED_REQUEST" => Ok(Err(OtpError::ReplayedRequest)),
+                _ => unreachable!("Unknown status"),
+            };
+        }
+
+        let timestamp = match CAPTURE_TIMESTAMP_RE
+            .captures_iter(&s)
+            .last()
+            .and_then(|m| m.get(1))
+        {
+            Some(s) => s.as_str().parse().expect("Unable to parse timestamp"),
+            None => unreachable!("Missing status in response"),
+        };
+
+        let session_ctr = match CAPTURE_SESSION_CTR_RE
+            .captures_iter(&s)
+            .last()
+            .and_then(|m| m.get(1))
+        {
+            Some(s) => s.as_str().parse().expect("Unable to parse sessioncounter"),
+            None => unreachable!("Missing status in response"),
+        };
+
+        let session_use = match CAPTURE_SESSION_USE_RE
+            .captures_iter(&s)
+            .last()
+            .and_then(|m| m.get(1))
+        {
+            Some(s) => s.as_str().parse().expect("Unable to parse sessionuse"),
+            None => unreachable!("Missing status in response"),
+        };
+
+        Ok(Ok(DecryptedOtp {
+            timestamp,
+            session_ctr,
+            session_use,
+        }))
     }
 }
 
