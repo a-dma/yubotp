@@ -17,7 +17,8 @@ use crypto::mac::Mac;
 use crypto::sha2::Sha256;
 
 use lazy_static::lazy_static;
-use rand::{thread_rng, Rng};
+use rand::seq::IteratorRandom;
+use rand::thread_rng;
 
 use hex;
 
@@ -249,11 +250,16 @@ fn handle_req(
                             let explanation;
                             match decrypted_otp {
                                 Ok(_) => {
-                                    text = rng.choose(&s.success).unwrap_or(&SUCCESS_TEXT);
+                                    text =
+                                        s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
                                     explanation = &s.success_explanation;
                                 }
                                 Err(OtpError::ReplayedOtp) => {
-                                    text = rng.choose(&s.replayed).unwrap_or(&REPLAYED_TEXT);
+                                    text = s
+                                        .replayed
+                                        .iter()
+                                        .choose(&mut rng)
+                                        .unwrap_or(&REPLAYED_TEXT);
                                     explanation = &s.replayed_explanation;
                                 }
                                 Err(e) => {
