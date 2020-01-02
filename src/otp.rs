@@ -147,7 +147,10 @@ impl OtpValidator {
         let mut raw_resp = client.get(query_string).send().await?;
         let response = raw_resp.body().await?;
 
-        let s = String::from_utf8(response.to_vec()).unwrap();
+        let s = match String::from_utf8(response.to_vec()) {
+            Ok(parsed) => parsed,
+            Err(err) => return Err(actix_web::error::ErrorInternalServerError(err)),
+        };
         let mut h = String::new();
         let mut sorted_result = s
             .trim()
@@ -177,7 +180,11 @@ impl OtpValidator {
             .and_then(|m| m.get(1))
         {
             Some(s) => s.as_str(),
-            None => unreachable!("Missing status in response"),
+            None => {
+                return Err(actix_web::error::ErrorInternalServerError(
+                    "Missing status in response",
+                ))
+            }
         };
 
         if status != "OK" {
@@ -191,7 +198,7 @@ impl OtpValidator {
                 "BACKEND_ERROR" => Ok(Err(OtpError::BackendError)),
                 "NOT_ENOUGH_ANSWERS" => Ok(Err(OtpError::NotEnoughAnswers)),
                 "REPLAYED_REQUEST" => Ok(Err(OtpError::ReplayedRequest)),
-                _ => unreachable!("Unknown status"),
+                _ => Err(actix_web::error::ErrorInternalServerError("Unknown status")),
             };
         }
 
@@ -200,8 +207,15 @@ impl OtpValidator {
             .last()
             .and_then(|m| m.get(1))
         {
-            Some(s) => s.as_str().parse().expect("Unable to parse timestamp"),
-            None => unreachable!("Missing status in response"),
+            Some(s) => match s.as_str().parse() {
+                Ok(t) => t,
+                Err(e) => return Err(actix_web::error::ErrorInternalServerError(e)),
+            },
+            None => {
+                return Err(actix_web::error::ErrorInternalServerError(
+                    "Missing timestamp in response",
+                ))
+            }
         };
 
         let session_ctr = match CAPTURE_SESSION_CTR_RE
@@ -209,8 +223,15 @@ impl OtpValidator {
             .last()
             .and_then(|m| m.get(1))
         {
-            Some(s) => s.as_str().parse().expect("Unable to parse sessioncounter"),
-            None => unreachable!("Missing status in response"),
+            Some(s) => match s.as_str().parse() {
+                Ok(c) => c,
+                Err(e) => return Err(actix_web::error::ErrorInternalServerError(e)),
+            },
+            None => {
+                return Err(actix_web::error::ErrorInternalServerError(
+                    "Missing sessioncounter in response",
+                ))
+            }
         };
 
         let session_use = match CAPTURE_SESSION_USE_RE
@@ -218,8 +239,15 @@ impl OtpValidator {
             .last()
             .and_then(|m| m.get(1))
         {
-            Some(s) => s.as_str().parse().expect("Unable to parse sessionuse"),
-            None => unreachable!("Missing status in response"),
+            Some(s) => match s.as_str().parse() {
+                Ok(u) => u,
+                Err(e) => return Err(actix_web::error::ErrorInternalServerError(e)),
+            },
+            None => {
+                return Err(actix_web::error::ErrorInternalServerError(
+                    "Missing sessionuse in response",
+                ))
+            }
         };
 
         Ok(Ok(DecryptedOtp {
