@@ -58,7 +58,7 @@ struct ValidatorApp {
 #[serde(untagged)]
 enum Event {
     Chal(Challenge),
-    Msg(OuterEvent),
+    Msg(Box<OuterEvent>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,7 +107,7 @@ enum Response {
     Chal(ChallengeResponse),
 }
 
-fn slack_escape_text(text: &String) -> String {
+fn slack_escape_text(text: &str) -> String {
     // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
     let mut s = String::with_capacity(2 * text.len());
 
@@ -125,7 +125,7 @@ fn slack_escape_text(text: &String) -> String {
 
 /// Shortens an OTP to its first and last four letters with dots in between.
 /// It assumes the `otp` parameter is a valid OTP (44 characters long).
-fn shorten_otp(otp: &String) -> String {
+fn shorten_otp(otp: &str) -> String {
     let mut ret = String::with_capacity(13);
 
     let caps = START_END_OTP_RE.captures(otp).unwrap();
@@ -137,7 +137,7 @@ fn shorten_otp(otp: &String) -> String {
 }
 
 /// Replaces the special dollar syntax and escapes the message
-fn prepare_slack_message(text: &String, otp: &String, user: &String) -> String {
+fn prepare_slack_message(text: &str, otp: &str, user: &str) -> String {
     slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
         .replace("$u", &format!("<@{}>", user))
 }
@@ -146,7 +146,7 @@ fn prepare_slack_message(text: &String, otp: &String, user: &String) -> String {
 fn verify_signature(
     ts: Option<&http::HeaderValue>,
     sig: Option<&http::HeaderValue>,
-    signing_secret: &String,
+    signing_secret: &str,
     bytes: &web::Bytes,
 ) -> bool {
     let req_timestamp = if let Some(timestamp) = ts {
@@ -208,15 +208,13 @@ async fn handle_req(
 
     if cfg!(debug_assertions) {
         debug!("Debug mode, skipping signature check");
-    } else {
-        if !verify_signature(
-            headers.get("X-Slack-Request-Timestamp"),
-            headers.get("X-Slack-Signature"),
-            signing_secret,
-            &bytes,
-        ) {
-            return Ok(HttpResponse::Ok().finish());
-        }
+    } else if !verify_signature(
+        headers.get("X-Slack-Request-Timestamp"),
+        headers.get("X-Slack-Signature"),
+        signing_secret,
+        &bytes,
+    ) {
+        return Ok(HttpResponse::Ok().finish());
     }
 
     let event = serde_json::from_slice::<Event>(&bytes)?;
@@ -305,14 +303,15 @@ async fn handle_req(
 async fn main() -> Result<(), io::Error> {
     env_logger::from_env("YUBOTP_LOG").init();
 
-    let settings =
-        match Settings::new(&std::env::var("YUBOTP_CFG").unwrap_or("config.toml".to_owned())) {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Unable to start, configuration error: {}", e);
-                std::process::exit(EXIT_FAILURE);
-            }
-        };
+    let settings = match Settings::new(
+        &std::env::var("YUBOTP_CFG").unwrap_or_else(|_| "config.toml".to_owned()),
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("Unable to start, configuration error: {}", e);
+            std::process::exit(EXIT_FAILURE);
+        }
+    };
 
     debug!("{}", settings);
 
@@ -333,7 +332,7 @@ async fn main() -> Result<(), io::Error> {
     let port = settings.server.port;
 
     let vapp = Arc::new(ValidatorApp {
-        validator: validator,
+        validator,
         slack_bot_token: settings.slack.bottoken,
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,

@@ -263,5 +263,5 @@ pub fn extract_otp(message: &str) -> Option<String> {
         .captures_iter(message)
         .last()
         .and_then(|m| m.get(0))
-        .and_then(|o| Some(o.as_str().to_lowercase()))
+        .map(|o| o.as_str().to_lowercase())
 }
