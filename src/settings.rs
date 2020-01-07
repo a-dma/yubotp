@@ -49,14 +49,16 @@ impl fmt::Display for OtpValidation {
 pub struct Answer {
     pub success: Vec<String>,
     pub replayed: Vec<String>,
+    pub newdevice: Vec<String>,
+    pub newdeviceon: bool,
 }
 
 impl fmt::Display for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Answer (success: {:?}, replayed: {:?})",
-            self.success, self.replayed
+            "Answer (success: {:?}, replayed: {:?}, newdevice: {:?}, newdeviceon: {:?})",
+            self.success, self.replayed, self.newdevice, self.newdeviceon
         )
     }
 }

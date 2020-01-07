@@ -39,6 +39,9 @@ lazy_static! {
 lazy_static! {
     static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
 }
+lazy_static! {
+    static ref NEWDEVICE_TEXT: String = String::from("Nice, a new YubiKey!");
+}
 
 lazy_static! {
     static ref START_END_OTP_RE: Regex = Regex::new("(.{4,4}).+(.{4,4})$").unwrap();
@@ -50,6 +53,8 @@ struct ValidatorApp {
     slack_signing_secret: String,
     success: Vec<String>,
     replayed: Vec<String>,
+    newdevice: Vec<String>,
+    newdevice_on: bool,
     success_explanation: String,
     replayed_explanation: String,
 }
@@ -247,6 +252,18 @@ async fn handle_req(
             let text;
             let explanation;
             match decrypted_otp {
+                Ok(otp::DecryptedOtp {
+                    session_ctr: c,
+                    session_use: u,
+                    ..
+                }) if s.newdevice_on && c + u == 1 => {
+                    text = s
+                        .newdevice
+                        .iter()
+                        .choose(&mut rng)
+                        .unwrap_or(&NEWDEVICE_TEXT);
+                    explanation = &s.success_explanation;
+                }
                 Ok(_) => {
                     text = s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
                     explanation = &s.success_explanation;
@@ -337,6 +354,8 @@ async fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
+        newdevice: settings.answers.newdevice,
+        newdevice_on: settings.answers.newdeviceon,
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
     });
