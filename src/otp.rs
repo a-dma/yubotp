@@ -16,7 +16,7 @@ use crypto::sha1::Sha1;
 use actix_web::client::Client;
 
 lazy_static! {
-    static ref CAPTURE_OTP_RE: Regex = RegexBuilder::new("([cbdefghijklnrtuv]{43,44})$")
+    static ref CAPTURE_OTP_RE: Regex = RegexBuilder::new("([cbdefghijklnrtuvx.pys]{43,44})$")
         .case_insensitive(true)
         .build()
         .unwrap();
