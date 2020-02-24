@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::collections::HashSet;
 use std::io;
 
 use serde_derive::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ use rand::thread_rng;
 
 use hex;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 mod otp;
 
@@ -52,6 +53,7 @@ struct ValidatorApp {
     replayed: Vec<String>,
     success_explanation: String,
     replayed_explanation: String,
+    otp_cache: Mutex<HashSet<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -238,6 +240,20 @@ async fn handle_req(
                 debug!("Otp received is 43 chars long, prepending 'c'");
             }
 
+            // If we don't reply to Slack in 3 seconds, they'll retry the message
+            // and we'll validate the OTP again and send multiple replies to
+            // Slack. So we keep a cache around and just return if the OTP
+            // we see is in the process of being validated. It'll be removed
+            // from the map right before producing a reply to Slack; this means
+            // there's still a race condition, but the window of failure is pretty
+            // small (and the worst case is a replayed otp message is sent to Slack).
+            if s.otp_cache.lock().unwrap().contains(&otp) {
+                debug!("Otp {} received again while still validating", otp);
+                return Ok(HttpResponse::Ok().finish());
+            } else {
+                s.otp_cache.lock().unwrap().insert(otp.to_owned());
+            }
+
             let tok = format!("Bearer {}", &s.slack_bot_token);
 
             let decrypted_otp = s.validator.validate_otp(&otp).await?;
@@ -294,6 +310,9 @@ async fn handle_req(
                 .send_json(&reply)
                 .await?;
 
+            debug!("Removing OTP {} from cache", otp);
+            s.otp_cache.lock().unwrap().remove(&otp);
+
             Ok(HttpResponse::Ok().finish())
         }
     }
@@ -339,6 +358,7 @@ async fn main() -> Result<(), io::Error> {
         replayed: settings.answers.replayed,
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
+        otp_cache: Mutex::new(HashSet::new()),
     });
 
     HttpServer::new(move || {
