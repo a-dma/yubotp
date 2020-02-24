@@ -30,7 +30,7 @@ impl fmt::Display for Slack {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct OtpValidation {
-    pub apihosts: Vec<String>,
+    pub apihost: String,
     pub apikey: String,
     pub clientid: String,
 }
@@ -39,8 +39,8 @@ impl fmt::Display for OtpValidation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "OtpValidation (apiHosts: {:?}, apikey: ******, clientid: {})",
-            self.apihosts, self.clientid
+            "OtpValidation (apiHost: {:?}, apikey: ******, clientid: {})",
+            self.apihost, self.clientid
         )
     }
 }
@@ -104,14 +104,8 @@ impl Settings {
         s.set_default("server.port", 8088)?;
 
         s.set_default(
-            "otpvalidation.apihosts",
-            vec![
-                "https://api.yubico.com/wsapi/2.0/verify",
-                "https://api2.yubico.com/wsapi/2.0/verify",
-                "https://api3.yubico.com/wsapi/2.0/verify",
-                "https://api4.yubico.com/wsapi/2.0/verify",
-                "https://api5.yubico.com/wsapi/2.0/verify",
-            ],
+            "otpvalidation.apihost",
+            "https://api.yubico.com/wsapi/2.0/verify",
         )?;
 
         s.set_default("answers.success", vec!["Success"])?;

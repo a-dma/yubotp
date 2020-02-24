@@ -13,8 +13,6 @@ use crypto::hmac::Hmac;
 use crypto::mac::Mac;
 use crypto::sha1::Sha1;
 
-use futures_util::future::FutureExt;
-
 use actix_web::client::Client;
 
 lazy_static! {
@@ -88,15 +86,15 @@ impl std::error::Error for OtpError {}
 pub struct OtpValidator {
     client_id: String,
     api_key: Vec<u8>,
-    api_hosts: Vec<String>,
+    api_host: String,
 }
 
 impl OtpValidator {
-    pub fn new(client_id: String, api_key: Vec<u8>, api_hosts: Vec<String>) -> Self {
+    pub fn new(client_id: String, api_key: Vec<u8>, api_host: String) -> Self {
         OtpValidator {
             client_id,
             api_key,
-            api_hosts,
+            api_host,
         }
     }
 
@@ -110,24 +108,7 @@ impl OtpValidator {
             .take(40)
             .collect();
 
-        let v = self
-            .api_hosts
-            .iter()
-            .map(|x| self.validate_otp_internal(x, &otp, &chars))
-            .collect::<Vec<_>>();
-
-        futures::future::join_all(v)
-            .map(|mut results| {
-                for i in 0..results.len() {
-                    if let Ok(res) = &results[i] {
-                        if res.is_ok() {
-                            return results.remove(i);
-                        }
-                    }
-                }
-
-                results.remove(0)
-            })
+        self.validate_otp_internal(&self.api_host, &otp, &chars)
             .await
     }
 

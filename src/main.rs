@@ -344,7 +344,7 @@ async fn main() -> Result<(), io::Error> {
     let validator = OtpValidator::new(
         settings.otpvalidation.clientid,
         api_key,
-        settings.otpvalidation.apihosts,
+        settings.otpvalidation.apihost,
     );
 
     let address = &settings.server.address;

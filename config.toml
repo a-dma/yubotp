@@ -6,10 +6,10 @@
 bottoken = ""
 signingsecret = ""
 
-[otpvalidation]
-apihost = "xxxx"
-apikey = "yyyy"
-clientid = "1234"
+# [otpvalidation]
+# apihost = "xxxx"
+# apikey = "yyyy"
+# clientid = "1234"
 
 [answers]
 success = [
