@@ -235,9 +235,10 @@ async fn handle_req(
             };
 
             debug!("Found otp: {:?}", otp);
-            if otp.len() == 43 && otp.starts_with('c') {
-                otp.insert(0, 'c');
-                debug!("Otp received is 43 chars long, prepending 'c'");
+            if otp.len() == 43 && (otp.starts_with('c') || otp.starts_with('j')) {
+                let c = otp.chars().nth(0).unwrap(); // unwrap is fine, we know it's there.
+                otp.insert(0, c);
+                debug!("Otp received is 43 chars long, prepending '{}'", c);
             }
 
             // If we don't reply to Slack in 3 seconds, they'll retry the message
