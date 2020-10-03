@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::io;
 
 use serde_derive::{Deserialize, Serialize};
-use serde_json;
 
 use log::{debug, error};
 
@@ -18,8 +17,6 @@ use crypto::sha2::Sha256;
 use lazy_static::lazy_static;
 use rand::seq::IteratorRandom;
 use rand::thread_rng;
-
-use hex;
 
 use std::sync::{Arc, Mutex};
 
@@ -236,7 +233,7 @@ async fn handle_req(
 
             debug!("Found otp: {:?}", otp);
             if otp.len() == 43 && (otp.starts_with('c') || otp.starts_with('j')) {
-                let c = otp.chars().nth(0).unwrap(); // unwrap is fine, we know it's there.
+                let c = otp.chars().next().unwrap(); // unwrap is fine, we know it's there.
                 otp.insert(0, c);
                 debug!("Otp received is 43 chars long, prepending '{}'", c);
             }
