@@ -304,6 +304,7 @@ async fn handle_req(
 
             client
                 .post(SLACK_POST_MESSAGE_ENDPOINT)
+                .header("Content-Type", "application/json; charset=UTF-8")
                 .header("Authorization", tok)
                 .send_json(&reply)
                 .await?;
