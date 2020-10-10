@@ -280,6 +280,7 @@ async fn handle_req(
             let reply = serde_json::json!({
                 "channel": m.event.channel,
                 "thread_ts": m.event.thread_ts,
+                "text": esc_text,
                 "blocks": [
                     {
                         "type": "section",
