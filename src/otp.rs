@@ -104,7 +104,7 @@ impl OtpValidator {
     ) -> std::result::Result<std::result::Result<DecryptedOtp, OtpError>, Error> {
         let mut rng = thread_rng();
         let chars: String = iter::repeat(())
-            .map(|()| rng.sample(Alphanumeric))
+            .map(|()| -> char { rng.sample(Alphanumeric).into() })
             .take(40)
             .collect();
 

@@ -320,7 +320,7 @@ async fn handle_req(
 
 #[actix_rt::main]
 async fn main() -> Result<(), io::Error> {
-    env_logger::from_env("YUBOTP_LOG").init();
+    env_logger::Builder::from_env("YUBOTP_LOG").init();
 
     let settings = match Settings::new(
         &std::env::var("YUBOTP_CFG").unwrap_or_else(|_| "config.toml".to_owned()),
