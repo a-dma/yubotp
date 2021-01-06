@@ -252,8 +252,8 @@ async fn handle_req(
                 .duplicate_messages_actor
                 .send(CacheOrIgnoreOtp(otp.to_owned()))
                 .await;
-            if let Ok(cached) = cache_resp {
-                if !cached {
+            if let Ok(stored) = cache_resp {
+                if !stored {
                     debug!("Otp {} received again while still validating", otp);
                     return Ok(HttpResponse::Ok().finish());
                 }
