@@ -222,7 +222,14 @@ async fn handle_req(
         return Ok(HttpResponse::Ok().finish());
     }
 
-    let event = serde_json::from_slice::<Event>(&bytes)?;
+    let event = if let Ok(ev) = serde_json::from_slice::<Event>(&bytes) {
+        ev
+    } else {
+        // We don't know how to handle this message, but if we send an error
+        // to Slack they will retry.
+        debug!("Dropping unknown message type");
+        return Ok(HttpResponse::Ok().finish());
+    };
 
     match event {
         Event::Chal(c) => Ok(HttpResponse::Ok().json(Response::Chal(ChallengeResponse {
