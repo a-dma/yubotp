@@ -9,9 +9,8 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::iter;
 
-use crypto::hmac::Hmac;
-use crypto::mac::Mac;
-use crypto::sha1::Sha1;
+use hmac::{Hmac, Mac, NewMac};
+use sha1::Sha1;
 
 use actix_web::client::Client;
 
@@ -89,6 +88,8 @@ pub struct OtpValidator {
     api_host: String,
 }
 
+type HmacSha1 = Hmac<Sha1>;
+
 impl OtpValidator {
     pub fn new(client_id: String, api_key: Vec<u8>, api_host: String) -> Self {
         OtpValidator {
@@ -147,11 +148,15 @@ impl OtpValidator {
             .collect::<Vec<_>>();
         sorted_result.sort();
         let message = sorted_result.join("&");
+        let h = if let Ok(decoded) = base64::decode(h) {
+            decoded
+        } else {
+            return Ok(Err(OtpError::BadSignature));
+        };
 
-        let mut hmac = Hmac::new(Sha1::new(), &api_key);
-        hmac.input(message.as_bytes());
-        let digest = hmac.result();
-        if h != base64::encode(digest.code()) {
+        let mut hmac = HmacSha1::new_varkey(&api_key).expect("Key length not valid");
+        hmac.update(message.as_bytes());
+        if hmac.verify(&h).is_err() {
             return Ok(Err(OtpError::BadSignature));
         }
 
