@@ -8,6 +8,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
+actix = "0.10.0"
 actix-rt = "1.1.1"
 actix-web = { version = "3.3.2", features = ["openssl"] }
 base64 = "0.13.0"
