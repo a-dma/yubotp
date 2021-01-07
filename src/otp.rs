@@ -154,7 +154,7 @@ impl OtpValidator {
             return Ok(Err(OtpError::BadSignature));
         };
 
-        let mut hmac = HmacSha1::new_varkey(&api_key).expect("Key length not valid");
+        let mut hmac = HmacSha1::new_varkey(&api_key).expect("This should never fail for Hmac");
         hmac.update(message.as_bytes());
         if hmac.verify(&h).is_err() {
             return Ok(Err(OtpError::BadSignature));

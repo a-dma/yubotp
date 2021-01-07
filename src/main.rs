@@ -187,7 +187,8 @@ fn verify_signature(
         return false;
     };
 
-    let mut hmac = HmacSha256::new_varkey(signing_secret.as_bytes()).expect("Key length not valid");
+    let mut hmac =
+        HmacSha256::new_varkey(signing_secret.as_bytes()).expect("This should never fail for Hmac");
     hmac.update(b"v0:");
     hmac.update(req_timestamp.as_bytes());
     hmac.update(b":");
