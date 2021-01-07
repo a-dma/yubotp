@@ -11,9 +11,8 @@ use actix_web::client::Client;
 use actix_web::web::Data;
 use actix_web::*;
 
-use crypto::hmac::Hmac;
-use crypto::mac::Mac;
-use crypto::sha2::Sha256;
+use hmac::{Hmac, Mac, NewMac};
+use sha2::Sha256;
 
 use lazy_static::lazy_static;
 use rand::seq::IteratorRandom;
@@ -111,6 +110,8 @@ enum Response {
     Chal(ChallengeResponse),
 }
 
+type HmacSha256 = Hmac<Sha256>;
+
 fn slack_escape_text(text: &str) -> String {
     // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
     let mut s = String::with_capacity(2 * text.len());
@@ -186,19 +187,19 @@ fn verify_signature(
         return false;
     };
 
-    let mut hmac = Hmac::new(Sha256::new(), signing_secret.as_bytes());
-    hmac.input(b"v0:");
-    hmac.input(req_timestamp.as_bytes());
-    hmac.input(b":");
-    hmac.input(&bytes);
+    let mut hmac =
+        HmacSha256::new_varkey(signing_secret.as_bytes()).expect("This should never fail for Hmac");
+    hmac.update(b"v0:");
+    hmac.update(req_timestamp.as_bytes());
+    hmac.update(b":");
+    hmac.update(&bytes);
 
-    let res = hmac.result();
-    if res.code() != &*req_signature {
+    if hmac.verify(&req_signature).is_err() {
         debug!("Wrong Slack signature");
-        return false;
+        false
+    } else {
+        true
     }
-
-    true
 }
 
 async fn handle_req(
