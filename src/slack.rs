@@ -1,13 +1,11 @@
 use serde::de::Error;
 use serde_derive::{Deserialize, Serialize};
 
-use log::debug;
-
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Event {
     Chal(Challenge),
-    Msg(Box<OuterEvent>),
+    Msg(OuterEvent),
 }
 
 #[derive(Debug, Deserialize)]
