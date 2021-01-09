@@ -292,6 +292,10 @@ async fn handle_req(
                     debug!("Received a bot message {:?}", m);
                     Ok(HttpResponse::Ok().finish())
                 }
+                Message::Deleted(m) => {
+                    debug!("Received a message_deleted {:?}", m);
+                    Ok(HttpResponse::Ok().finish())
+                }
             }
         }
     }

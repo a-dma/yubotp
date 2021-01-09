@@ -46,10 +46,36 @@ pub struct BotMessage {
     pub channel_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PreviousMessage {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub user: String,
+    pub text: String,
+    pub ts: String,
+    pub thread_ts: Option<String>,
+    pub client_msg_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeletedMessage {
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub channel: String,
+    pub hidden: bool,
+    pub deleted_ts: String,
+    pub ts: String,
+    pub thread_ts: Option<String>,
+    pub event_ts: String,
+    pub channel_type: String,
+    pub previous_message: PreviousMessage,
+}
+
 #[derive(Debug)]
 pub enum Message {
     Simple(SimpleMessage),
     Bot(BotMessage),
+    Deleted(DeletedMessage),
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,12 +104,20 @@ impl<'de> serde::Deserialize<'de> for Message {
                         .map(Message::Bot)
                         .map_err(|e| D::Error::custom(&format!("{}", e)))
                 }
-                _ => panic!("unknown message subtype {}", subtype),
+                &serde_json::Value::String(st) if st == "message_deleted" => {
+                    serde_json::from_value::<DeletedMessage>(content)
+                        .map(Message::Deleted)
+                        .map_err(|e| D::Error::custom(&format!("{}", e)))
+                }
+                _ => Err(D::Error::custom(format!(
+                    "unknown message subtype {}",
+                    subtype
+                ))),
             }
         } else {
             serde_json::from_value::<SimpleMessage>(content)
                 .map(Message::Simple)
-                .map_err(|e| D::Error::custom(&format!("{}", e)))
+                .map_err(|e| D::Error::custom(format!("{}", e)))
         }
     }
 }
