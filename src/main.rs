@@ -57,6 +57,7 @@ struct ValidatorApp {
     slack_signing_secret: String,
     success: Vec<String>,
     replayed: Vec<String>,
+    deleted: Vec<String>,
     success_explanation: String,
     replayed_explanation: String,
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
@@ -313,6 +314,46 @@ async fn handle_req(
                 }
                 Message::Deleted(m) => {
                     debug!("Received a message_deleted {:?}", m);
+
+                    let bot_message_response = s
+                        .bot_responses_actor
+                        .send(RetrieveBotMessageInfo(m.deleted_ts))
+                        .await;
+                    let bot_message_info: PostMessageResponse =
+                        if let Ok(maybe_bot_message) = bot_message_response {
+                            match maybe_bot_message {
+                                Some(bot_message_info) => bot_message_info,
+                                None => return Ok(HttpResponse::Ok().finish()),
+                            }
+                        } else {
+                            return Err(actix_web::error::ErrorInternalServerError(
+                                "Internal server error",
+                            ));
+                        };
+
+                    let client = Client::default();
+                    let tok = format!("Bearer {}", &s.slack_bot_token);
+
+                    let mut rng = thread_rng();
+                    let text = if let Some(t) = s.deleted.iter().choose(&mut rng) {
+                        t
+                    } else {
+                        return Ok(HttpResponse::Ok().finish());
+                    };
+
+                    let reply = serde_json::json!({
+                        "channel": bot_message_info.channel,
+                        "thread_ts": bot_message_info.ts,
+                        "text": slack_escape_text(text),
+                    });
+
+                    client
+                        .post(SLACK_POST_MESSAGE_ENDPOINT)
+                        .header("Content-Type", "application/json; charset=UTF-8")
+                        .header("Authorization", tok)
+                        .send_json(&reply)
+                        .await?;
+
                     Ok(HttpResponse::Ok().finish())
                 }
             }
@@ -361,6 +402,7 @@ async fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
+        deleted: settings.answers.deleted,
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
         duplicate_messages_actor: dup,

@@ -30,6 +30,17 @@ replayed = [
   "The \"OT\" stands for \"One Time\""
 ]
 
+deleted = [
+  "Hey you deleted your message! That's not fair!",
+  "I was sure I saw a message with an OTP...",
+  "Wait! Where did that message go!?",
+  "Am I seeing OTPs that aren't there? Help!",
+  "I was faster than you!",
+  "Deleting the message is cheating",
+  "I must have imagined it",
+  "I must be tired"
+]
+
 [explanation]
 success = "_The OTP has been consumed._"
 replayed = "_Replayed OTP, it has already been consumed._"
