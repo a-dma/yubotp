@@ -292,13 +292,8 @@ async fn handle_req(
                         Ok(_) => Ok(HttpResponse::Ok().finish()),
                     }
                 }
-                Message::Bot(m) => {
-                    debug!("Received a bot message {:?}", m);
-                    Ok(HttpResponse::Ok().finish())
-                }
+                Message::Bot(_) => Ok(HttpResponse::Ok().finish()),
                 Message::Deleted(m) => {
-                    debug!("Received a message_deleted {:?}", m);
-
                     let bot_message_response = s
                         .bot_responses_actor
                         .send(RetrieveBotMessageInfo(m.deleted_ts))
