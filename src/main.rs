@@ -66,22 +66,6 @@ struct ValidatorApp {
 
 type HmacSha256 = Hmac<Sha256>;
 
-fn slack_escape_text(text: &str) -> String {
-    // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
-    let mut s = String::with_capacity(2 * text.len());
-
-    for c in text.chars() {
-        match c {
-            '<' => s.push_str("&lt;"),
-            '>' => s.push_str("&gt;"),
-            '&' => s.push_str("&amp;"),
-            _ => s.push(c),
-        };
-    }
-
-    s
-}
-
 /// Shortens an OTP to its first and last four letters with dots in between.
 /// It assumes the `otp` parameter is a valid OTP (44 characters long).
 fn shorten_otp(otp: &str) -> String {
@@ -97,7 +81,7 @@ fn shorten_otp(otp: &str) -> String {
 
 /// Replaces the special dollar syntax and escapes the message
 fn prepare_slack_message(text: &str, otp: &str, user: &str) -> String {
-    slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
+    slack::slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
         .replace("$u", &format!("<@{}>", user))
 }
 
@@ -344,7 +328,7 @@ async fn handle_req(
                     let reply = serde_json::json!({
                         "channel": bot_message_info.channel,
                         "thread_ts": bot_message_info.ts,
-                        "text": slack_escape_text(text),
+                        "text": slack::slack_escape_text(text),
                     });
 
                     client

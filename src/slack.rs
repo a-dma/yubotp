@@ -136,3 +136,19 @@ pub struct PostMessageResponse {
     pub channel: String,
     pub ts: String,
 }
+
+pub fn slack_escape_text(text: &str) -> String {
+    // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
+    let mut s = String::with_capacity(2 * text.len());
+
+    for c in text.chars() {
+        match c {
+            '<' => s.push_str("&lt;"),
+            '>' => s.push_str("&gt;"),
+            '&' => s.push_str("&amp;"),
+            _ => s.push(c),
+        };
+    }
+
+    s
+}
