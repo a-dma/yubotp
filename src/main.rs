@@ -28,11 +28,14 @@ use settings::Settings;
 
 mod actors;
 
-use actors::{CacheOrIgnoreOtp, DuplicateMessagesActor, RemoveOtp};
+use actors::{
+    BotResponsesActor, CacheOrIgnoreOtp, DuplicateMessagesActor, NewBotMessage, RemoveOtp,
+    RetrieveBotMessageInfo,
+};
 
 mod slack;
 
-use slack::{ChallengeResponse, Event, Message, Response};
+use slack::{ChallengeResponse, Event, Message, PostMessageResponse, Response};
 
 static EXIT_FAILURE: i32 = 1;
 
@@ -57,6 +60,7 @@ struct ValidatorApp {
     success_explanation: String,
     replayed_explanation: String,
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
+    bot_responses_actor: Addr<BotResponsesActor>,
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -273,12 +277,27 @@ async fn handle_req(
 
                     let client = Client::default();
 
-                    client
+                    let mut response = client
                         .post(SLACK_POST_MESSAGE_ENDPOINT)
                         .header("Content-Type", "application/json; charset=UTF-8")
                         .header("Authorization", tok)
                         .send_json(&reply)
                         .await?;
+
+                    let response_body = response.body().await?;
+                    let post_message_response =
+                        serde_json::from_slice::<PostMessageResponse>(&response_body)?;
+
+                    let new_message_resp = s
+                        .bot_responses_actor
+                        .send(NewBotMessage::new(m.ts, post_message_response))
+                        .await;
+
+                    if new_message_resp.is_err() {
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
+                    }
 
                     let remove_resp = s.duplicate_messages_actor.send(RemoveOtp(otp)).await;
                     match remove_resp {
@@ -334,6 +353,7 @@ async fn main() -> Result<(), io::Error> {
     let port = settings.server.port;
 
     let dup = DuplicateMessagesActor::new().start();
+    let bot_resp = BotResponsesActor::new().start();
 
     let vapp = Arc::new(ValidatorApp {
         validator,
@@ -344,6 +364,7 @@ async fn main() -> Result<(), io::Error> {
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
         duplicate_messages_actor: dup,
+        bot_responses_actor: bot_resp,
     });
 
     HttpServer::new(move || {

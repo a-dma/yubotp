@@ -130,3 +130,9 @@ pub struct ChallengeResponse {
 pub enum Response {
     Chal(ChallengeResponse),
 }
+
+#[derive(Debug, Deserialize)]
+pub struct PostMessageResponse {
+    pub channel: String,
+    pub ts: String,
+}
