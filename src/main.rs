@@ -1,8 +1,6 @@
 use regex::Regex;
 use std::io;
 
-use serde_derive::{Deserialize, Serialize};
-
 use log::{debug, error};
 
 use actix::prelude::Addr;
@@ -30,7 +28,14 @@ use settings::Settings;
 
 mod actors;
 
-use actors::{CacheOrIgnoreOtp, DuplicateMessagesActor, RemoveOtp};
+use actors::{
+    BotResponsesActor, CacheOrIgnoreOtp, DuplicateMessagesActor, NewBotMessage, RemoveOtp,
+    RetrieveBotMessageInfo,
+};
+
+mod slack;
+
+use slack::{ChallengeResponse, Event, Message, PostMessageResponse, Response};
 
 static EXIT_FAILURE: i32 = 1;
 
@@ -52,81 +57,14 @@ struct ValidatorApp {
     slack_signing_secret: String,
     success: Vec<String>,
     replayed: Vec<String>,
+    deleted: Vec<String>,
     success_explanation: String,
     replayed_explanation: String,
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum Event {
-    Chal(Challenge),
-    Msg(Box<OuterEvent>),
-}
-
-#[derive(Debug, Deserialize)]
-struct Challenge {
-    token: String,
-    challenge: String,
-    #[serde(rename = "type")]
-    event_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Message {
-    #[serde(rename = "type")]
-    event_type: String,
-    channel: String,
-    user: String,
-    text: String,
-    ts: String,
-    thread_ts: Option<String>,
-    event_ts: String,
-    channel_type: String,
-    client_msg_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OuterEvent {
-    token: String,
-    team_id: String,
-    api_app_id: String,
-    event: Message,
-    #[serde(rename = "type")]
-    event_type: String,
-    authed_users: Vec<String>,
-    event_id: String,
-    event_time: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct ChallengeResponse {
-    challenge: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-enum Response {
-    Chal(ChallengeResponse),
+    bot_responses_actor: Addr<BotResponsesActor>,
 }
 
 type HmacSha256 = Hmac<Sha256>;
-
-fn slack_escape_text(text: &str) -> String {
-    // Escape text as required by https://api.slack.com/docs/message-formatting#how_to_escape_characters
-    let mut s = String::with_capacity(2 * text.len());
-
-    for c in text.chars() {
-        match c {
-            '<' => s.push_str("&lt;"),
-            '>' => s.push_str("&gt;"),
-            '&' => s.push_str("&amp;"),
-            _ => s.push(c),
-        };
-    }
-
-    s
-}
 
 /// Shortens an OTP to its first and last four letters with dots in between.
 /// It assumes the `otp` parameter is a valid OTP (44 characters long).
@@ -143,7 +81,7 @@ fn shorten_otp(otp: &str) -> String {
 
 /// Replaces the special dollar syntax and escapes the message
 fn prepare_slack_message(text: &str, otp: &str, user: &str) -> String {
-    slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
+    slack::slack_escape_text(&text.replace("$o", otp).replace("$O", &shorten_otp(otp)))
         .replace("$u", &format!("<@{}>", user))
 }
 
@@ -236,105 +174,167 @@ async fn handle_req(
             challenge: c.challenge,
         }))),
 
-        Event::Msg(m) => {
-            let mut otp = match otp::extract_otp(&m.event.text) {
-                Some(otp) => otp,
-                None => {
-                    return Ok(HttpResponse::Ok().finish());
-                }
-            };
-
-            debug!("Found otp: {:?}", otp);
-            if otp.len() == 43 && (otp.starts_with('c') || otp.starts_with('j')) {
-                let c = otp.chars().next().unwrap(); // unwrap is fine, we know it's there.
-                otp.insert(0, c);
-                debug!("Otp received is 43 chars long, prepending '{}'", c);
-            }
-
-            // If we don't reply to Slack in 3 seconds, they'll retry the message
-            // and we'll validate the OTP again and send multiple replies to
-            // Slack. So we keep a cache around and just return if the OTP
-            // we see is in the process of being validated. It'll be removed
-            // from the map right after producing a reply to Slack.
-            let cache_resp = s
-                .duplicate_messages_actor
-                .send(CacheOrIgnoreOtp(otp.to_owned()))
-                .await;
-            if let Ok(stored) = cache_resp {
-                if !stored {
-                    debug!("Otp {} received again while still validating", otp);
-                    return Ok(HttpResponse::Ok().finish());
-                }
-            } else {
-                return Err(actix_web::error::ErrorInternalServerError(
-                    "Internal server error",
-                ));
-            }
-
-            let tok = format!("Bearer {}", &s.slack_bot_token);
-
-            let decrypted_otp = s.validator.validate_otp(&otp).await?;
-
-            debug!("Decrypted OTP: {:?}", decrypted_otp);
-            let mut rng = thread_rng();
-            let text;
-            let explanation;
-            match decrypted_otp {
-                Ok(_) => {
-                    text = s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
-                    explanation = &s.success_explanation;
-                }
-                Err(OtpError::ReplayedOtp) => {
-                    text = s.replayed.iter().choose(&mut rng).unwrap_or(&REPLAYED_TEXT);
-                    explanation = &s.replayed_explanation;
-                }
-                Err(e) => {
-                    return Err(actix_web::error::ErrorBadRequest(e));
-                }
-            }
-
-            let esc_text = prepare_slack_message(text, &otp, &m.event.user);
-            let explanation = prepare_slack_message(&explanation, &otp, &m.event.user);
-
-            let reply = serde_json::json!({
-                "channel": m.event.channel,
-                "thread_ts": m.event.thread_ts,
-                "text": esc_text,
-                "blocks": [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": esc_text
+        Event::Msg(message) => {
+            match message.event {
+                Message::Simple(m) => {
+                    let mut otp = match otp::extract_otp(&m.text) {
+                        Some(otp) => otp,
+                        None => {
+                            return Ok(HttpResponse::Ok().finish());
                         }
-                    },
-                    {
-                        "type": "context",
-                        "elements": [
+                    };
+
+                    debug!("Found otp: {:?}", otp);
+                    if otp.len() == 43 && (otp.starts_with('c') || otp.starts_with('j')) {
+                        let c = otp.chars().next().unwrap(); // unwrap is fine, we know it's there.
+                        otp.insert(0, c);
+                        debug!("Otp received is 43 chars long, prepending '{}'", c);
+                    }
+
+                    // If we don't reply to Slack in 3 seconds, they'll retry the message
+                    // and we'll validate the OTP again and send multiple replies to
+                    // Slack. So we keep a cache around and just return if the OTP
+                    // we see is in the process of being validated. It'll be removed
+                    // from the map right after producing a reply to Slack.
+                    let cache_resp = s
+                        .duplicate_messages_actor
+                        .send(CacheOrIgnoreOtp(otp.to_owned()))
+                        .await;
+                    if let Ok(stored) = cache_resp {
+                        if !stored {
+                            debug!("Otp {} received again while still validating", otp);
+                            return Ok(HttpResponse::Ok().finish());
+                        }
+                    } else {
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
+                    }
+
+                    let tok = format!("Bearer {}", &s.slack_bot_token);
+
+                    let decrypted_otp = s.validator.validate_otp(&otp).await?;
+
+                    debug!("Decrypted OTP: {:?}", decrypted_otp);
+                    let mut rng = thread_rng();
+                    let text;
+                    let explanation;
+                    match decrypted_otp {
+                        Ok(_) => {
+                            text = s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
+                            explanation = &s.success_explanation;
+                        }
+                        Err(OtpError::ReplayedOtp) => {
+                            text = s.replayed.iter().choose(&mut rng).unwrap_or(&REPLAYED_TEXT);
+                            explanation = &s.replayed_explanation;
+                        }
+                        Err(e) => {
+                            return Err(actix_web::error::ErrorBadRequest(e));
+                        }
+                    }
+
+                    let esc_text = prepare_slack_message(text, &otp, &m.user);
+                    let explanation = prepare_slack_message(&explanation, &otp, &m.user);
+
+                    let reply = serde_json::json!({
+                        "channel": m.channel,
+                        "thread_ts": m.thread_ts,
+                        "text": esc_text,
+                        "blocks": [
                             {
-                                "type": "mrkdwn",
-                                "text": &explanation
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": esc_text
+                                }
+                            },
+                            {
+                                "type": "context",
+                                "elements": [
+                                    {
+                                        "type": "mrkdwn",
+                                        "text": &explanation
+                                    }
+                                ]
                             }
                         ]
+                    });
+
+                    let client = Client::default();
+
+                    let mut response = client
+                        .post(SLACK_POST_MESSAGE_ENDPOINT)
+                        .header("Content-Type", "application/json; charset=UTF-8")
+                        .header("Authorization", tok)
+                        .send_json(&reply)
+                        .await?;
+
+                    let response_body = response.body().await?;
+                    let post_message_response =
+                        serde_json::from_slice::<PostMessageResponse>(&response_body)?;
+
+                    let new_message_resp = s
+                        .bot_responses_actor
+                        .send(NewBotMessage::new(m.ts, post_message_response))
+                        .await;
+
+                    if new_message_resp.is_err() {
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
                     }
-                ]
-            });
 
-            let client = Client::default();
+                    let remove_resp = s.duplicate_messages_actor.send(RemoveOtp(otp)).await;
+                    match remove_resp {
+                        Err(_) => Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        )),
+                        Ok(_) => Ok(HttpResponse::Ok().finish()),
+                    }
+                }
+                Message::Bot(_) => Ok(HttpResponse::Ok().finish()),
+                Message::Deleted(m) => {
+                    let bot_message_response = s
+                        .bot_responses_actor
+                        .send(RetrieveBotMessageInfo(m.deleted_ts))
+                        .await;
+                    let bot_message_info: PostMessageResponse =
+                        if let Ok(maybe_bot_message) = bot_message_response {
+                            match maybe_bot_message {
+                                Some(bot_message_info) => bot_message_info,
+                                None => return Ok(HttpResponse::Ok().finish()),
+                            }
+                        } else {
+                            return Err(actix_web::error::ErrorInternalServerError(
+                                "Internal server error",
+                            ));
+                        };
 
-            client
-                .post(SLACK_POST_MESSAGE_ENDPOINT)
-                .header("Content-Type", "application/json; charset=UTF-8")
-                .header("Authorization", tok)
-                .send_json(&reply)
-                .await?;
+                    let client = Client::default();
+                    let tok = format!("Bearer {}", &s.slack_bot_token);
 
-            let remove_resp = s.duplicate_messages_actor.send(RemoveOtp(otp)).await;
-            match remove_resp {
-                Err(_) => Err(actix_web::error::ErrorInternalServerError(
-                    "Internal server error",
-                )),
-                Ok(_) => Ok(HttpResponse::Ok().finish()),
+                    let mut rng = thread_rng();
+                    let text = if let Some(t) = s.deleted.iter().choose(&mut rng) {
+                        t
+                    } else {
+                        return Ok(HttpResponse::Ok().finish());
+                    };
+
+                    let reply = serde_json::json!({
+                        "channel": bot_message_info.channel,
+                        "thread_ts": bot_message_info.ts,
+                        "text": slack::slack_escape_text(text),
+                    });
+
+                    client
+                        .post(SLACK_POST_MESSAGE_ENDPOINT)
+                        .header("Content-Type", "application/json; charset=UTF-8")
+                        .header("Authorization", tok)
+                        .send_json(&reply)
+                        .await?;
+
+                    Ok(HttpResponse::Ok().finish())
+                }
             }
         }
     }
@@ -373,6 +373,7 @@ async fn main() -> Result<(), io::Error> {
     let port = settings.server.port;
 
     let dup = DuplicateMessagesActor::new().start();
+    let bot_resp = BotResponsesActor::new().start();
 
     let vapp = Arc::new(ValidatorApp {
         validator,
@@ -380,9 +381,11 @@ async fn main() -> Result<(), io::Error> {
         slack_signing_secret: settings.slack.signingsecret,
         success: settings.answers.success,
         replayed: settings.answers.replayed,
+        deleted: settings.answers.deleted,
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
         duplicate_messages_actor: dup,
+        bot_responses_actor: bot_resp,
     });
 
     HttpServer::new(move || {
