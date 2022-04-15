@@ -9,10 +9,10 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::iter;
 
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha1::Sha1;
 
-use actix_web::client::Client;
+use awc::Client;
 
 lazy_static! {
     static ref CAPTURE_OTP_RE: Regex = RegexBuilder::new("([cbdefghijklnrtuvx.pys]{43,44})$")
@@ -126,13 +126,22 @@ impl OtpValidator {
         );
 
         let api_key = self.api_key.clone();
-        let mut raw_resp = client.get(query_string).send().await?;
-        let response = raw_resp.body().await?;
-
-        let s = match String::from_utf8(response.to_vec()) {
-            Ok(parsed) => parsed,
+        let raw_resp = client.get(query_string).send().await;
+        let response = match raw_resp {
+            Ok(mut b) => b.body().await,
             Err(err) => return Err(actix_web::error::ErrorInternalServerError(err)),
         };
+
+        let to_string = response
+            .map(|bytes| bytes.to_vec())
+            .map(|v| String::from_utf8(v));
+
+        let s = match to_string {
+            Ok(Ok(parsed)) => parsed,
+            Ok(Err(err)) => return Err(actix_web::error::ErrorInternalServerError(err)),
+            Err(err) => return Err(actix_web::error::ErrorInternalServerError(err)),
+        };
+
         let mut h = String::new();
         let mut sorted_result = s
             .trim()
@@ -154,9 +163,9 @@ impl OtpValidator {
             return Ok(Err(OtpError::BadSignature));
         };
 
-        let mut hmac = HmacSha1::new_varkey(&api_key).expect("This should never fail for Hmac");
+        let mut hmac = HmacSha1::new_from_slice(&api_key).expect("This should never fail for Hmac");
         hmac.update(message.as_bytes());
-        if hmac.verify(&h).is_err() {
+        if hmac.verify_slice(&h).is_err() {
             return Ok(Err(OtpError::BadSignature));
         }
 

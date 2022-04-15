@@ -5,11 +5,12 @@ use log::{debug, error};
 
 use actix::prelude::Addr;
 use actix::Actor;
-use actix_web::client::Client;
+use actix_web::http::header::HeaderValue;
 use actix_web::web::Data;
 use actix_web::*;
+use awc::Client;
 
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use lazy_static::lazy_static;
@@ -87,8 +88,8 @@ fn prepare_slack_message(text: &str, otp: &str, user: &str) -> String {
 
 /// Verifies the signature of the data received by Slack
 fn verify_signature(
-    ts: Option<&http::HeaderValue>,
-    sig: Option<&http::HeaderValue>,
+    ts: Option<&HeaderValue>,
+    sig: Option<&HeaderValue>,
     signing_secret: &str,
     bytes: &web::Bytes,
 ) -> bool {
@@ -125,14 +126,14 @@ fn verify_signature(
         return false;
     };
 
-    let mut hmac =
-        HmacSha256::new_varkey(signing_secret.as_bytes()).expect("This should never fail for Hmac");
+    let mut hmac = HmacSha256::new_from_slice(signing_secret.as_bytes())
+        .expect("This should never fail for Hmac");
     hmac.update(b"v0:");
     hmac.update(req_timestamp.as_bytes());
     hmac.update(b":");
     hmac.update(&bytes);
 
-    if hmac.verify(&req_signature).is_err() {
+    if hmac.verify_slice(&req_signature).is_err() {
         debug!("Wrong Slack signature");
         false
     } else {
@@ -262,14 +263,23 @@ async fn handle_req(
 
                     let client = Client::default();
 
-                    let mut response = client
+                    let response = client
                         .post(SLACK_POST_MESSAGE_ENDPOINT)
-                        .header("Content-Type", "application/json; charset=UTF-8")
-                        .header("Authorization", tok)
+                        .append_header(("Content-Type", "application/json; charset=UTF-8"))
+                        .append_header(("Authorization", tok))
                         .send_json(&reply)
-                        .await?;
+                        .await;
 
-                    let response_body = response.body().await?;
+                    if response.is_err() {
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
+                    }
+
+                    let response_body = match response.unwrap().body().await {
+                        Ok(resp) => resp,
+                        Err(err) => return Err(actix_web::error::ErrorInternalServerError(err)),
+                    };
                     let post_message_response =
                         serde_json::from_slice::<PostMessageResponse>(&response_body)?;
 
@@ -326,12 +336,18 @@ async fn handle_req(
                         "text": slack::slack_escape_text(text),
                     });
 
-                    client
+                    let res = client
                         .post(SLACK_POST_MESSAGE_ENDPOINT)
-                        .header("Content-Type", "application/json; charset=UTF-8")
-                        .header("Authorization", tok)
+                        .append_header(("Content-Type", "application/json; charset=UTF-8"))
+                        .append_header(("Authorization", tok))
                         .send_json(&reply)
-                        .await?;
+                        .await;
+
+                    if res.is_err() {
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
+                    }
 
                     Ok(HttpResponse::Ok().finish())
                 }
@@ -340,7 +356,11 @@ async fn handle_req(
     }
 }
 
-#[actix_rt::main]
+async fn handle_health() -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::Ok().body("OK"))
+}
+
+#[actix_web::main]
 async fn main() -> Result<(), io::Error> {
     env_logger::Builder::from_env("YUBOTP_LOG").init();
 
@@ -390,12 +410,10 @@ async fn main() -> Result<(), io::Error> {
 
     HttpServer::new(move || {
         App::new()
-            .data(Arc::clone(&vapp))
+            .app_data(Data::new(Arc::clone(&vapp)))
             .wrap(middleware::Logger::default())
             .service(web::resource("/").route(web::post().to(handle_req)))
-            .service(
-                web::resource("/health").route(web::get().to(|| HttpResponse::Ok().body("OK"))),
-            )
+            .service(web::resource("/health").route(web::get().to(handle_health)))
     })
     .bind(format!("{}:{}", address, port))?
     .run()

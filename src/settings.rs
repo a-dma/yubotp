@@ -99,29 +99,26 @@ impl fmt::Display for Settings {
 
 impl Settings {
     pub fn new(file: &str) -> Result<Self, ConfigError> {
-        let mut s = Config::default();
+        let builder = Config::builder()
+            .set_default("server.address", "0.0.0.0")?
+            .set_default::<&str, u64>("server.port", 8088)?
+            .set_default(
+                "otpvalidation.apihost",
+                "https://api.yubico.com/wsapi/2.0/verify",
+            )?
+            .set_default("answers.success", vec!["Success"])?
+            .set_default("answers.replayed", vec!["Replayed"])?
+            .set_default("answers.deleted", vec!["Deleted"])?
+            .set_default("explanation.success", "_The OTP has been consumed._")?
+            .set_default(
+                "explanation.replayed",
+                "_Replayed OTP, it has already been consumed._",
+            )?
+            .add_source(File::with_name(&file).required(false))
+            .add_source(Environment::with_prefix("yubotp").separator("_"));
 
-        s.set_default("server.address", "0.0.0.0")?;
-        s.set_default("server.port", 8088)?;
+        let c = builder.build()?;
 
-        s.set_default(
-            "otpvalidation.apihost",
-            "https://api.yubico.com/wsapi/2.0/verify",
-        )?;
-
-        s.set_default("answers.success", vec!["Success"])?;
-        s.set_default("answers.replayed", vec!["Replayed"])?;
-        s.set_default("answers.deleted", vec!["Deleted"])?;
-        s.set_default("explanation.success", "_The OTP has been consumed._")?;
-        s.set_default(
-            "explanation.replayed",
-            "_Replayed OTP, it has already been consumed._",
-        )?;
-
-        s.merge(File::with_name(&file))?;
-
-        s.merge(Environment::with_prefix("yubotp").separator("_"))?;
-
-        s.try_into()
+        c.try_deserialize()
     }
 }
