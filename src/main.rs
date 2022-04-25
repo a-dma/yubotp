@@ -14,8 +14,6 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use lazy_static::lazy_static;
-use rand::seq::IteratorRandom;
-use rand::thread_rng;
 
 use std::sync::Arc;
 
@@ -30,8 +28,8 @@ use settings::Settings;
 mod actors;
 
 use actors::{
-    BotResponsesActor, CacheOrIgnoreOtp, DuplicateMessagesActor, NewBotMessage, RemoveOtp,
-    RetrieveBotMessageInfo,
+    BotResponsesActor, CacheOrIgnoreOtp, DuplicateMessagesActor, NewBotMessage, NewReply,
+    RemoveOtp, RepliesSelectionActor, Reply, RetrieveBotMessageInfo,
 };
 
 mod slack;
@@ -41,12 +39,6 @@ use slack::{ChallengeResponse, Event, Message, PostMessageResponse, Response};
 static EXIT_FAILURE: i32 = 1;
 
 static SLACK_POST_MESSAGE_ENDPOINT: &str = "https://slack.com/api/chat.postMessage";
-lazy_static! {
-    static ref SUCCESS_TEXT: String = String::from("OTP validated");
-}
-lazy_static! {
-    static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
-}
 
 lazy_static! {
     static ref START_END_OTP_RE: Regex = Regex::new("(.{4,4}).+(.{4,4})$").unwrap();
@@ -56,13 +48,11 @@ struct ValidatorApp {
     validator: otp::OtpValidator,
     slack_bot_token: String,
     slack_signing_secret: String,
-    success: Vec<String>,
-    replayed: Vec<String>,
-    deleted: Vec<String>,
     success_explanation: String,
     replayed_explanation: String,
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
     bot_responses_actor: Addr<BotResponsesActor>,
+    replies_actor: Addr<RepliesSelectionActor>,
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -217,16 +207,41 @@ async fn handle_req(
                     let decrypted_otp = s.validator.validate_otp(&otp).await?;
 
                     debug!("Decrypted OTP: {:?}", decrypted_otp);
-                    let mut rng = thread_rng();
                     let text;
                     let explanation;
                     match decrypted_otp {
                         Ok(_) => {
-                            text = s.success.iter().choose(&mut rng).unwrap_or(&SUCCESS_TEXT);
+                            let reply = s
+                                .replies_actor
+                                .send(NewReply {
+                                    reply_type: Reply::Success,
+                                })
+                                .await;
+                            if let Ok(r) = reply {
+                                text = r;
+                            } else {
+                                return Err(actix_web::error::ErrorInternalServerError(
+                                    "Internal server error",
+                                ));
+                            }
+
                             explanation = &s.success_explanation;
                         }
                         Err(OtpError::ReplayedOtp) => {
-                            text = s.replayed.iter().choose(&mut rng).unwrap_or(&REPLAYED_TEXT);
+                            let reply = s
+                                .replies_actor
+                                .send(NewReply {
+                                    reply_type: Reply::Replayed,
+                                })
+                                .await;
+                            if let Ok(r) = reply {
+                                text = r;
+                            } else {
+                                return Err(actix_web::error::ErrorInternalServerError(
+                                    "Internal server error",
+                                ));
+                            }
+
                             explanation = &s.replayed_explanation;
                         }
                         Err(e) => {
@@ -234,7 +249,7 @@ async fn handle_req(
                         }
                     }
 
-                    let esc_text = prepare_slack_message(text, &otp, &m.user);
+                    let esc_text = prepare_slack_message(&text, &otp, &m.user);
                     let explanation = prepare_slack_message(&explanation, &otp, &m.user);
 
                     let reply = serde_json::json!({
@@ -323,17 +338,25 @@ async fn handle_req(
                     let client = Client::default();
                     let tok = format!("Bearer {}", &s.slack_bot_token);
 
-                    let mut rng = thread_rng();
-                    let text = if let Some(t) = s.deleted.iter().choose(&mut rng) {
-                        t
+                    let text;
+                    let reply = s
+                        .replies_actor
+                        .send(NewReply {
+                            reply_type: Reply::Deleted,
+                        })
+                        .await;
+                    if let Ok(r) = reply {
+                        text = r;
                     } else {
-                        return Ok(HttpResponse::Ok().finish());
-                    };
+                        return Err(actix_web::error::ErrorInternalServerError(
+                            "Internal server error",
+                        ));
+                    }
 
                     let reply = serde_json::json!({
                         "channel": bot_message_info.channel,
                         "thread_ts": bot_message_info.ts,
-                        "text": slack::slack_escape_text(text),
+                        "text": slack::slack_escape_text(&text),
                     });
 
                     let res = client
@@ -394,18 +417,22 @@ async fn main() -> Result<(), io::Error> {
 
     let dup = DuplicateMessagesActor::new().start();
     let bot_resp = BotResponsesActor::new().start();
+    let replies = RepliesSelectionActor::new(
+        settings.answers.success,
+        settings.answers.replayed,
+        settings.answers.deleted,
+    )
+    .start();
 
     let vapp = Arc::new(ValidatorApp {
         validator,
         slack_bot_token: settings.slack.bottoken,
         slack_signing_secret: settings.slack.signingsecret,
-        success: settings.answers.success,
-        replayed: settings.answers.replayed,
-        deleted: settings.answers.deleted,
         success_explanation: settings.explanation.success,
         replayed_explanation: settings.explanation.replayed,
         duplicate_messages_actor: dup,
         bot_responses_actor: bot_resp,
+        replies_actor: replies,
     });
 
     HttpServer::new(move || {
