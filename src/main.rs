@@ -39,6 +39,15 @@ use slack::{ChallengeResponse, Event, Message, PostMessageResponse, Response};
 static EXIT_FAILURE: i32 = 1;
 
 static SLACK_POST_MESSAGE_ENDPOINT: &str = "https://slack.com/api/chat.postMessage";
+lazy_static! {
+    static ref SUCCESS_TEXT: String = String::from("OTP validated");
+}
+lazy_static! {
+    static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
+}
+lazy_static! {
+    static ref NEWDEVICE_TEXT: String = String::from("Nice, a new YubiKey!");
+}
 
 lazy_static! {
     static ref START_END_OTP_RE: Regex = Regex::new("(.{4,4}).+(.{4,4})$").unwrap();
@@ -53,6 +62,9 @@ struct ValidatorApp {
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
     bot_responses_actor: Addr<BotResponsesActor>,
     replies_actor: Addr<RepliesSelectionActor>,
+    newdevice_on: bool,
+    newdevice_session_ctr: u8,
+    newdevice_use_ctr: u16,
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -210,6 +222,30 @@ async fn handle_req(
                     let text;
                     let explanation;
                     match decrypted_otp {
+                        Ok(otp::DecryptedOtp {
+                            session_ctr: c, // incremented on first touch after boot
+                            session_use: u, // incremented with every touch
+                            ..
+                        }) if s.newdevice_on
+                            && c <= s.newdevice_session_ctr
+                            && u <= s.newdevice_use_ctr =>
+                        {
+                            let reply = s
+                                .replies_actor
+                                .send(NewReply {
+                                    reply_type: Reply::NewDevice,
+                                })
+                                .await;
+                            if let Ok(r) = reply {
+                                text = r;
+                            } else {
+                                return Err(actix_web::error::ErrorInternalServerError(
+                                    "Internal server error",
+                                ));
+                            }
+                            explanation = &s.success_explanation;
+                        }
+
                         Ok(_) => {
                             let reply = s
                                 .replies_actor
@@ -421,6 +457,7 @@ async fn main() -> Result<(), io::Error> {
         settings.answers.success,
         settings.answers.replayed,
         settings.answers.deleted,
+        settings.answers.newdevice,
     )
     .start();
 
@@ -433,6 +470,9 @@ async fn main() -> Result<(), io::Error> {
         duplicate_messages_actor: dup,
         bot_responses_actor: bot_resp,
         replies_actor: replies,
+        newdevice_on: settings.answers.newdeviceon,
+        newdevice_session_ctr: settings.answers.session_counter,
+        newdevice_use_ctr: settings.answers.use_counter,
     });
 
     HttpServer::new(move || {

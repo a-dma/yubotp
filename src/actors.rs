@@ -26,6 +26,10 @@ lazy_static! {
     static ref DELETED_TEXT: String = String::from("The OTP is gone");
 }
 
+lazy_static! {
+    static ref NEWDEVICE_TEXT: String = String::from("Nice, a new YubiKey!");
+}
+
 pub struct DuplicateMessagesActor {
     otp_cache: HashSet<String>,
 }
@@ -168,6 +172,7 @@ pub enum Reply {
     Success,
     Replayed,
     Deleted,
+    NewDevice,
 }
 
 pub struct RepliesSelectionActor {
@@ -177,10 +182,17 @@ pub struct RepliesSelectionActor {
     replayed: Vec<String>,
     deleted_orig: Vec<String>,
     deleted: Vec<String>,
+    newdevice_orig: Vec<String>,
+    newdevice: Vec<String>,
 }
 
 impl RepliesSelectionActor {
-    pub fn new(success: Vec<String>, replayed: Vec<String>, deleted: Vec<String>) -> Self {
+    pub fn new(
+        success: Vec<String>,
+        replayed: Vec<String>,
+        deleted: Vec<String>,
+        newdevice: Vec<String>,
+    ) -> Self {
         RepliesSelectionActor {
             success_orig: success.clone(),
             success,
@@ -188,6 +200,8 @@ impl RepliesSelectionActor {
             replayed,
             deleted_orig: deleted.clone(),
             deleted,
+            newdevice_orig: newdevice.clone(),
+            newdevice,
         }
     }
 
@@ -206,6 +220,10 @@ impl RepliesSelectionActor {
             Reply::Deleted => {
                 self.deleted = self.deleted_orig.clone();
                 self.deleted.shuffle(&mut rng);
+            }
+            Reply::NewDevice => {
+                self.newdevice = self.newdevice_orig.clone();
+                self.newdevice.shuffle(&mut rng);
             }
         }
     }
@@ -226,6 +244,10 @@ impl RepliesSelectionActor {
             Reply::Deleted => {
                 replies = &mut self.deleted;
                 default_reply = &DELETED_TEXT;
+            }
+            Reply::NewDevice => {
+                replies = &mut self.newdevice;
+                default_reply = &NEWDEVICE_TEXT;
             }
         }
 

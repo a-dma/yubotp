@@ -50,14 +50,18 @@ pub struct Answer {
     pub success: Vec<String>,
     pub replayed: Vec<String>,
     pub deleted: Vec<String>,
+    pub newdevice: Vec<String>,
+    pub newdeviceon: bool,
+    pub session_counter: u8,
+    pub use_counter: u16,
 }
 
 impl fmt::Display for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Answer (success: {:?}, replayed: {:?}, deleted: {:?})",
-            self.success, self.replayed, self.deleted
+            "Answer (success: {:?}, replayed: {:?}, deleted: {:?}, newdevice: {:?}, newdeviceon: {:?}, session_ctr: {:?}, use_ctr: {:?})",
+            self.success, self.replayed, self.deleted, self.newdevice, self.newdeviceon, self.session_counter, self.use_counter,
         )
     }
 }
@@ -101,7 +105,7 @@ impl Settings {
     pub fn new(file: &str) -> Result<Self, ConfigError> {
         let builder = Config::builder()
             .set_default("server.address", "0.0.0.0")?
-            .set_default::<&str, u64>("server.port", 8088)?
+            .set_default("server.port", 8088)?
             .set_default(
                 "otpvalidation.apihost",
                 "https://api.yubico.com/wsapi/2.0/verify",
@@ -109,6 +113,9 @@ impl Settings {
             .set_default("answers.success", vec!["Success"])?
             .set_default("answers.replayed", vec!["Replayed"])?
             .set_default("answers.deleted", vec!["Deleted"])?
+            .set_default("answers.newdevice", vec!["New Device"])?
+            .set_default("answers.session_counter", 0)?
+            .set_default("answers.use_counter", 5)?
             .set_default("explanation.success", "_The OTP has been consumed._")?
             .set_default(
                 "explanation.replayed",

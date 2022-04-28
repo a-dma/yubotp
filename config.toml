@@ -41,6 +41,18 @@ deleted = [
   "I must be tired"
 ]
 
+newdevice = [
+  "Welcome to the company!",
+  "Nice, a new YubiKey!",
+  "Enjoy your new Yubikey!",
+  "Don't worry, it happened to all of us, welcome to the team!"
+]
+
+newdeviceon = true
+
+session_counter = 0
+use_counter = 5
+
 [explanation]
 success = "_The OTP has been consumed._"
 replayed = "_Replayed OTP, it has already been consumed._"

@@ -40,8 +40,8 @@ lazy_static! {
 #[derive(Debug, Serialize)]
 pub struct DecryptedOtp {
     pub timestamp: u32,
-    pub session_ctr: u32,
-    pub session_use: u32,
+    pub session_ctr: u8,
+    pub session_use: u16,
 }
 
 #[derive(Debug)]
