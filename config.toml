@@ -50,6 +50,9 @@ newdevice = [
 
 newdeviceon = true
 
+# session_counter: incremented on first touch after boot.
+# use_counter: incremented with every touch.
+# Refer to https://developers.yubico.com/OTP/OTPs_Explained.html
 session_counter = 0
 use_counter = 5
 
