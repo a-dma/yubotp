@@ -41,7 +41,7 @@ lazy_static! {
 pub struct DecryptedOtp {
     pub timestamp: u32,
     pub session_ctr: u8,
-    pub session_use: u16,
+    pub use_ctr: u16,
 }
 
 #[derive(Debug)]
@@ -229,7 +229,7 @@ impl OtpValidator {
             }
         };
 
-        let session_use = match CAPTURE_SESSION_USE_RE
+        let use_ctr = match CAPTURE_SESSION_USE_RE
             .captures_iter(&s)
             .last()
             .and_then(|m| m.get(1))
@@ -248,7 +248,7 @@ impl OtpValidator {
         Ok(Ok(DecryptedOtp {
             timestamp,
             session_ctr,
-            session_use,
+            use_ctr,
         }))
     }
 }

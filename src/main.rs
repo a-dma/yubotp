@@ -224,7 +224,7 @@ async fn handle_req(
                     match decrypted_otp {
                         Ok(otp::DecryptedOtp {
                             session_ctr: c, // incremented on first touch after boot
-                            session_use: u, // incremented with every touch
+                            use_ctr: u,     // incremented with every touch
                             ..
                         }) if s.newdevice_on
                             && c <= s.newdevice_session_ctr
