@@ -62,9 +62,9 @@ struct ValidatorApp {
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
     bot_responses_actor: Addr<BotResponsesActor>,
     replies_actor: Addr<RepliesSelectionActor>,
-    newdevice_on: bool,
-    newdevice_session_ctr: u8,
-    newdevice_use_ctr: u16,
+    new_device_on: bool,
+    new_device_session_ctr: u8,
+    new_device_use_ctr: u16,
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -226,16 +226,17 @@ async fn handle_req(
                             session_ctr: c, // incremented on first touch after boot
                             use_ctr: u,     // incremented with every touch
                             ..
-                        }) if s.newdevice_on
-                            && c <= s.newdevice_session_ctr
-                            && u <= s.newdevice_use_ctr =>
-                        {
-                            let reply = s
-                                .replies_actor
-                                .send(NewReply {
-                                    reply_type: Reply::NewDevice,
-                                })
-                                .await;
+                        }) => {
+                            let reply_type = if s.new_device_on
+                                && c <= s.new_device_session_ctr
+                                && u <= s.new_device_use_ctr
+                            {
+                                Reply::NewDevice
+                            } else {
+                                Reply::Success
+                            };
+
+                            let reply = s.replies_actor.send(NewReply { reply_type }).await;
                             if let Ok(r) = reply {
                                 text = r;
                             } else {
@@ -246,23 +247,6 @@ async fn handle_req(
                             explanation = &s.success_explanation;
                         }
 
-                        Ok(_) => {
-                            let reply = s
-                                .replies_actor
-                                .send(NewReply {
-                                    reply_type: Reply::Success,
-                                })
-                                .await;
-                            if let Ok(r) = reply {
-                                text = r;
-                            } else {
-                                return Err(actix_web::error::ErrorInternalServerError(
-                                    "Internal server error",
-                                ));
-                            }
-
-                            explanation = &s.success_explanation;
-                        }
                         Err(OtpError::ReplayedOtp) => {
                             let reply = s
                                 .replies_actor
@@ -457,7 +441,7 @@ async fn main() -> Result<(), io::Error> {
         settings.answers.success,
         settings.answers.replayed,
         settings.answers.deleted,
-        settings.answers.newdevice,
+        settings.answers.new_device,
     )
     .start();
 
@@ -470,9 +454,9 @@ async fn main() -> Result<(), io::Error> {
         duplicate_messages_actor: dup,
         bot_responses_actor: bot_resp,
         replies_actor: replies,
-        newdevice_on: settings.answers.newdeviceon,
-        newdevice_session_ctr: settings.answers.session_counter,
-        newdevice_use_ctr: settings.answers.use_counter,
+        new_device_on: settings.answers.new_device_on,
+        new_device_session_ctr: settings.answers.session_counter,
+        new_device_use_ctr: settings.answers.use_counter,
     });
 
     HttpServer::new(move || {

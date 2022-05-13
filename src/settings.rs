@@ -50,8 +50,8 @@ pub struct Answer {
     pub success: Vec<String>,
     pub replayed: Vec<String>,
     pub deleted: Vec<String>,
-    pub newdevice: Vec<String>,
-    pub newdeviceon: bool,
+    pub new_device: Vec<String>,
+    pub new_device_on: bool,
     pub session_counter: u8,
     pub use_counter: u16,
 }
@@ -60,8 +60,8 @@ impl fmt::Display for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Answer (success: {:?}, replayed: {:?}, deleted: {:?}, newdevice: {:?}, newdeviceon: {:?}, session_ctr: {:?}, use_ctr: {:?})",
-            self.success, self.replayed, self.deleted, self.newdevice, self.newdeviceon, self.session_counter, self.use_counter,
+            "Answer (success: {:?}, replayed: {:?}, deleted: {:?}, new_device: {:?}, new_device_on: {:?}, session_ctr: {:?}, use_ctr: {:?})",
+            self.success, self.replayed, self.deleted, self.new_device, self.new_device_on, self.session_counter, self.use_counter,
         )
     }
 }
@@ -113,7 +113,8 @@ impl Settings {
             .set_default("answers.success", vec!["Success"])?
             .set_default("answers.replayed", vec!["Replayed"])?
             .set_default("answers.deleted", vec!["Deleted"])?
-            .set_default("answers.newdevice", vec!["New Device"])?
+            .set_default("answers.new_device", vec!["New Device"])?
+            .set_default("answers.new_device_on", true)?
             .set_default("answers.session_counter", 0)?
             .set_default("answers.use_counter", 5)?
             .set_default("explanation.success", "_The OTP has been consumed._")?

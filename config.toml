@@ -41,14 +41,14 @@ deleted = [
   "I must be tired"
 ]
 
-newdevice = [
+new_device = [
   "Welcome to the company!",
   "Nice, a new YubiKey!",
   "Enjoy your new Yubikey!",
   "Don't worry, it happened to all of us, welcome to the team!"
 ]
 
-newdeviceon = true
+new_device_on = true
 
 # session_counter: incremented on first touch after boot.
 # use_counter: incremented with every touch.
