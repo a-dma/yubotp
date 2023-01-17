@@ -84,7 +84,7 @@ pub struct OuterEvent {
     pub event: Message,
     #[serde(rename = "type")]
     pub event_type: String,
-    pub authed_users: Vec<String>,
+    pub authed_users: Option<Vec<String>>,
     pub event_id: String,
     pub event_time: u64,
 }
