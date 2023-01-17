@@ -4,8 +4,6 @@ use actix::prelude::{Actor, Context, Handler, Message};
 use actix::AsyncContext;
 use log::debug;
 
-use lazy_static::lazy_static;
-
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 
@@ -14,17 +12,9 @@ use crate::slack::PostMessageResponse;
 const OTP_CACHE_REMOVE_DELAY: u64 = 5;
 const BOT_MESSAGE_REMOVE_DELAY: u64 = 3 * 60 * 60; // 3 hours
 
-lazy_static! {
-    static ref SUCCESS_TEXT: String = String::from("OTP validated");
-}
-
-lazy_static! {
-    static ref REPLAYED_TEXT: String = String::from("Replayed OTP");
-}
-
-lazy_static! {
-    static ref DELETED_TEXT: String = String::from("The OTP is gone");
-}
+static SUCCESS_TEXT: &str = "OTP validated";
+static REPLAYED_TEXT: &str = "Replayed OTP";
+static DELETED_TEXT: &str = "The OTP is gone";
 
 pub struct DuplicateMessagesActor {
     otp_cache: HashSet<String>,
@@ -217,15 +207,15 @@ impl RepliesSelectionActor {
         match msg_type {
             Reply::Success => {
                 replies = &mut self.success;
-                default_reply = &SUCCESS_TEXT;
+                default_reply = SUCCESS_TEXT;
             }
             Reply::Replayed => {
                 replies = &mut self.replayed;
-                default_reply = &REPLAYED_TEXT;
+                default_reply = REPLAYED_TEXT;
             }
             Reply::Deleted => {
                 replies = &mut self.deleted;
-                default_reply = &DELETED_TEXT;
+                default_reply = DELETED_TEXT;
             }
         }
 
