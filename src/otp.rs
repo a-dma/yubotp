@@ -1,3 +1,4 @@
+use base64::Engine;
 use actix_web::*;
 use regex::{Regex, RegexBuilder};
 
@@ -157,7 +158,7 @@ impl OtpValidator {
             .collect::<Vec<_>>();
         sorted_result.sort();
         let message = sorted_result.join("&");
-        let h = if let Ok(decoded) = base64::decode(h) {
+        let h = if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(h) {
             decoded
         } else {
             return Ok(Err(OtpError::BadSignature));

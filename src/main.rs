@@ -1,3 +1,4 @@
+use base64::Engine;
 use regex::Regex;
 use std::io;
 
@@ -399,7 +400,7 @@ async fn main() -> Result<(), io::Error> {
 
     debug!("{}", settings);
 
-    let api_key = if let Ok(key) = base64::decode(&settings.otpvalidation.apikey) {
+    let api_key = if let Ok(key) = base64::engine::general_purpose::STANDARD.decode(&settings.otpvalidation.apikey) {
         key
     } else {
         error!("API key is not valid base64");
