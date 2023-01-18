@@ -5,7 +5,7 @@ authors = [
     "Alessio Di Mauro <alessio@alessiodimauro.com>",
     "Alessandro Carlo Chirico <alessandro.carlo@chiri.co>"
 ]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 actix = "0.13.0"
