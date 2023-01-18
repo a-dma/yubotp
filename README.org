@@ -32,6 +32,9 @@ this for later.
 
 Subscribe the bot user to the [[https://api.slack.com/events/message.channels][message.channels]] event.
 
+Go to OAuth & Permissions and add the OAuth scope chat:write to the
+bot token scopes. This will be needed to allow the post to Slack
+
 *** Yubicloud Setup
 
 Obtain an [[https://upgrade.yubico.com/getapikey/][API key]] for the Yubicloud and record both the Client ID and
