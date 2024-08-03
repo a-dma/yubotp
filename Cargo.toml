@@ -8,22 +8,22 @@ authors = [
 edition = "2021"
 
 [dependencies]
-actix = "0.13.3"
-actix-rt = "2.9.0"
-actix-web = { version = "4.6.0", features = ["openssl"] }
+actix = "0.13.5"
+actix-rt = "2.10.0"
+actix-web = { version = "4.8.0", features = ["openssl"] }
 awc = { version = "3.5.0", features = ["openssl"] }
 base64 = "0.22.1"
-bytes = "1.6.0"
+bytes = "1.7.1"
 config = "0.14.0"
-env_logger = "0.11.3"
+env_logger = "0.11.5"
 hex = "0.4.3"
 hmac = "0.12.1"
-log = "0.4.21"
+log = "0.4.22"
 rand = "0.8.5"
-regex = "1.10.4"
-serde = "1.0.202"
-serde_derive = "1.0.202"
-serde_json = "1.0.117"
+regex = "1.10.6"
+serde = "1.0.204"
+serde_derive = "1.0.204"
+serde_json = "1.0.122"
 sha-1 = "0.10.1"
 sha2 = "0.10.8"
-tokio = "1.37.0"
+tokio = "1.39.2"
