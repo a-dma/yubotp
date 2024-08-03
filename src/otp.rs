@@ -4,39 +4,34 @@ use regex::{Regex, RegexBuilder};
 
 use serde_derive::Serialize;
 
-use lazy_static::lazy_static;
-
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::iter;
+use std::sync::LazyLock;
 
 use hmac::{Hmac, Mac};
 use sha1::Sha1;
 
 use awc::Client;
 
-lazy_static! {
-    static ref CAPTURE_OTP_RE: Regex = RegexBuilder::new("([cbdefghijklnrtuvx.pys]{43,44})$")
+static CAPTURE_OTP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    RegexBuilder::new("([cbdefghijklnrtuvx.pys]{43,44})$")
         .case_insensitive(true)
         .build()
-        .unwrap();
-}
+        .unwrap()
+});
 
-lazy_static! {
-    static ref CAPTURE_TIMESTAMP_RE: Regex = Regex::new("timestamp=([0-9]*)").unwrap();
-}
+static CAPTURE_TIMESTAMP_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("timestamp=([0-9]*)").unwrap());
 
-lazy_static! {
-    static ref CAPTURE_SESSION_CTR_RE: Regex = Regex::new("sessioncounter=([0-9]*)").unwrap();
-}
+static CAPTURE_SESSION_CTR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("sessioncounter=([0-9]*)").unwrap());
 
-lazy_static! {
-    static ref CAPTURE_SESSION_USE_RE: Regex = Regex::new("sessionuse=([0-9]*)").unwrap();
-}
+static CAPTURE_SESSION_USE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("sessionuse=([0-9]*)").unwrap());
 
-lazy_static! {
-    static ref CAPTURE_STATUS_RE: Regex = Regex::new("status=([A-Z_]*)").unwrap();
-}
+static CAPTURE_STATUS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("status=([A-Z_]*)").unwrap());
 
 #[derive(Debug, Serialize)]
 pub struct DecryptedOtp {

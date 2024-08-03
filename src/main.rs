@@ -14,9 +14,8 @@ use awc::Client;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-use lazy_static::lazy_static;
-
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 mod otp;
 
@@ -41,9 +40,8 @@ static EXIT_FAILURE: i32 = 1;
 
 static SLACK_POST_MESSAGE_ENDPOINT: &str = "https://slack.com/api/chat.postMessage";
 
-lazy_static! {
-    static ref START_END_OTP_RE: Regex = Regex::new("(.{4,4}).+(.{4,4})$").unwrap();
-}
+static START_END_OTP_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new("(.{4,4}).+(.{4,4})$").unwrap());
 
 struct ValidatorApp {
     validator: otp::OtpValidator,
