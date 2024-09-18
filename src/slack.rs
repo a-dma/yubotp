@@ -96,16 +96,16 @@ impl<'de> serde::Deserialize<'de> for Message {
     {
         let content: serde_json::Value = serde_json::Value::deserialize(deserializer)?;
         if let Some(ref subtype) = content.get("subtype") {
-            match subtype {
-                &serde_json::Value::String(st) if st == "bot_message" => {
+            match *subtype {
+                serde_json::Value::String(st) if st == "bot_message" => {
                     serde_json::from_value::<BotMessage>(content)
                         .map(Message::Bot)
-                        .map_err(|e| D::Error::custom(&format!("{}", e)))
+                        .map_err(|e| D::Error::custom(format!("{}", e)))
                 }
-                &serde_json::Value::String(st) if st == "message_deleted" => {
+                serde_json::Value::String(st) if st == "message_deleted" => {
                     serde_json::from_value::<DeletedMessage>(content)
                         .map(Message::Deleted)
-                        .map_err(|e| D::Error::custom(&format!("{}", e)))
+                        .map_err(|e| D::Error::custom(format!("{}", e)))
                 }
                 _ => Err(D::Error::custom(format!(
                     "unknown message subtype {}",

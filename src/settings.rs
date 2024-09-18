@@ -140,7 +140,7 @@ impl Settings {
             )?
             .set_default("counterthresholds.ctr", 0)?
             .set_default("counterthresholds.usage", 0)?
-            .add_source(File::with_name(&file).required(false))
+            .add_source(File::with_name(file).required(false))
             .add_source(Environment::with_prefix("yubotp").separator("_"));
 
         let c = builder.build()?;

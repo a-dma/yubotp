@@ -63,9 +63,9 @@ fn shorten_otp(otp: &str) -> String {
     let mut ret = String::with_capacity(13);
 
     let caps = START_END_OTP_RE.captures(otp).unwrap();
-    ret.push_str(&caps.get(1).unwrap().as_str());
+    ret.push_str(caps.get(1).unwrap().as_str());
     ret.push_str("...");
-    ret.push_str(&caps.get(2).unwrap().as_str());
+    ret.push_str(caps.get(2).unwrap().as_str());
 
     ret
 }
@@ -121,7 +121,7 @@ fn verify_signature(
     hmac.update(b"v0:");
     hmac.update(req_timestamp.as_bytes());
     hmac.update(b":");
-    hmac.update(&bytes);
+    hmac.update(bytes);
 
     if hmac.verify_slice(&req_signature).is_err() {
         debug!("Wrong Slack signature");
@@ -256,7 +256,7 @@ async fn handle_req(
                     }
 
                     let esc_text = prepare_slack_message(&text, &otp, &m.user);
-                    let explanation = prepare_slack_message(&explanation, &otp, &m.user);
+                    let explanation = prepare_slack_message(explanation, &otp, &m.user);
 
                     let reply = serde_json::json!({
                         "channel": m.channel,

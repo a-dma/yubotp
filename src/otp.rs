@@ -43,12 +43,8 @@ pub struct DecryptedOtp {
 }
 
 impl DecryptedOtp {
-    pub fn is_new_device(self, session_ctr_threshold: u32, session_use_threshold: u32) -> bool {
-        if self.session_ctr < session_ctr_threshold && self.session_use < session_use_threshold {
-            true
-        } else {
-            false
-        }
+    pub fn is_new_device(&self, session_ctr_threshold: u32, session_use_threshold: u32) -> bool {
+        self.session_ctr < session_ctr_threshold && self.session_use < session_use_threshold
     }
 }
 
@@ -117,7 +113,7 @@ impl OtpValidator {
             .take(40)
             .collect();
 
-        self.validate_otp_internal(&self.api_host, &otp, &chars)
+        self.validate_otp_internal(&self.api_host, otp, &chars)
             .await
     }
 
@@ -140,9 +136,7 @@ impl OtpValidator {
             Err(err) => return Err(actix_web::error::ErrorInternalServerError(err)),
         };
 
-        let to_string = response
-            .map(|bytes| bytes.to_vec())
-            .map(|v| String::from_utf8(v));
+        let to_string = response.map(|bytes| bytes.to_vec()).map(String::from_utf8);
 
         let s = match to_string {
             Ok(Ok(parsed)) => parsed,
@@ -155,8 +149,8 @@ impl OtpValidator {
             .trim()
             .lines()
             .filter(|s| {
-                if s.starts_with("h=") {
-                    h = s[2..].to_string();
+                if let Some(stripped) = s.strip_prefix("h=") {
+                    h = stripped.to_string();
                     false
                 } else {
                     true
