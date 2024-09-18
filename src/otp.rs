@@ -36,8 +36,20 @@ static CAPTURE_STATUS_RE: LazyLock<Regex> =
 #[derive(Debug, Serialize)]
 pub struct DecryptedOtp {
     pub timestamp: u32,
+    // reset at every power-up
     pub session_ctr: u32,
+    // incremented at every power-up
     pub session_use: u32,
+}
+
+impl DecryptedOtp {
+    pub fn is_new_device(self, session_ctr_threshold: u32, session_use_threshold: u32) -> bool {
+        if self.session_ctr < session_ctr_threshold && self.session_use < session_use_threshold {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -23,7 +23,7 @@ use otp::{OtpError, OtpValidator};
 
 mod settings;
 
-use settings::Settings;
+use settings::{CounterThresholds, Settings};
 
 mod actors;
 
@@ -52,6 +52,7 @@ struct ValidatorApp {
     duplicate_messages_actor: Addr<DuplicateMessagesActor>,
     bot_responses_actor: Addr<BotResponsesActor>,
     replies_actor: Addr<RepliesSelectionActor>,
+    counter_thresholds: CounterThresholds,
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -209,13 +210,19 @@ async fn handle_req(
                     let text;
                     let explanation;
                     match decrypted_otp {
-                        Ok(_) => {
-                            let reply = s
-                                .replies_actor
-                                .send(NewReply {
+                        Ok(otp) => {
+                            let thresholds = s.counter_thresholds;
+                            let reply = if otp.is_new_device(thresholds.ctr, thresholds.usage) {
+                                s.replies_actor.send(NewReply {
+                                    reply_type: Reply::SuccessNewDevice,
+                                })
+                            } else {
+                                s.replies_actor.send(NewReply {
                                     reply_type: Reply::Success,
                                 })
-                                .await;
+                            }
+                            .await;
+
                             if let Ok(r) = reply {
                                 text = r;
                             } else {
@@ -416,9 +423,12 @@ async fn main() -> Result<(), io::Error> {
     let address = &settings.server.address;
     let port = settings.server.port;
 
+    let counter_thresholds = settings.counterthresholds;
+
     let dup = DuplicateMessagesActor::new().start();
     let bot_resp = BotResponsesActor::new().start();
     let replies = RepliesSelectionActor::new(
+        settings.answers.newdevice,
         settings.answers.success,
         settings.answers.replayed,
         settings.answers.deleted,
@@ -434,6 +444,7 @@ async fn main() -> Result<(), io::Error> {
         duplicate_messages_actor: dup,
         bot_responses_actor: bot_resp,
         replies_actor: replies,
+        counter_thresholds,
     });
 
     HttpServer::new(move || {

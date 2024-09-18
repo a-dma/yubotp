@@ -12,6 +12,12 @@ signingsecret = ""
 # clientid = "1234"
 
 [answers]
+newdevice = [
+  "Welcome!",
+  "Enjoy your new device",
+  "It's a rite of passage",
+]
+
 success = [
   "You're cool $u",
   "You know you can disable carriage return, right?",
@@ -44,3 +50,7 @@ deleted = [
 [explanation]
 success = "_The OTP has been consumed._"
 replayed = "_Replayed OTP, it has already been consumed._"
+
+# [counterthresholds]
+# ctr = 0
+# usage = 0

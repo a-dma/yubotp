@@ -12,6 +12,7 @@ use crate::slack::PostMessageResponse;
 const OTP_CACHE_REMOVE_DELAY: u64 = 5;
 const BOT_MESSAGE_REMOVE_DELAY: u64 = 3 * 60 * 60; // 3 hours
 
+static NEWDEVICE_TEXT: &str = "OTP from new device validated";
 static SUCCESS_TEXT: &str = "OTP validated";
 static REPLAYED_TEXT: &str = "Replayed OTP";
 static DELETED_TEXT: &str = "The OTP is gone";
@@ -155,12 +156,15 @@ impl Handler<RetrieveBotMessageInfo> for BotResponsesActor {
 
 #[derive(Debug)]
 pub enum Reply {
+    SuccessNewDevice,
     Success,
     Replayed,
     Deleted,
 }
 
 pub struct RepliesSelectionActor {
+    success_new_device_orig: Vec<String>,
+    success_new_device: Vec<String>,
     success_orig: Vec<String>,
     success: Vec<String>,
     replayed_orig: Vec<String>,
@@ -170,8 +174,15 @@ pub struct RepliesSelectionActor {
 }
 
 impl RepliesSelectionActor {
-    pub fn new(success: Vec<String>, replayed: Vec<String>, deleted: Vec<String>) -> Self {
+    pub fn new(
+        success_new_device: Vec<String>,
+        success: Vec<String>,
+        replayed: Vec<String>,
+        deleted: Vec<String>,
+    ) -> Self {
         RepliesSelectionActor {
+            success_new_device_orig: success_new_device.clone(),
+            success_new_device,
             success_orig: success.clone(),
             success,
             replayed_orig: replayed.clone(),
@@ -185,6 +196,10 @@ impl RepliesSelectionActor {
         let mut rng = thread_rng();
 
         match msg_type {
+            Reply::SuccessNewDevice => {
+                self.success_new_device = self.success_new_device_orig.clone();
+                self.success_new_device.shuffle(&mut rng);
+            }
             Reply::Success => {
                 self.success = self.success_orig.clone();
                 self.success.shuffle(&mut rng);
@@ -205,6 +220,10 @@ impl RepliesSelectionActor {
         let default_reply: &str;
 
         match msg_type {
+            Reply::SuccessNewDevice => {
+                replies = &mut self.success_new_device;
+                default_reply = NEWDEVICE_TEXT;
+            }
             Reply::Success => {
                 replies = &mut self.success;
                 default_reply = SUCCESS_TEXT;
