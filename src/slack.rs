@@ -5,9 +5,10 @@ use serde_derive::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum Event {
     Chal(Challenge),
-    Msg(OuterEvent),
+    Msg(Box<OuterEvent>),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct Challenge {
     pub token: String,
@@ -16,6 +17,7 @@ pub struct Challenge {
     pub event_type: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SimpleMessage {
     #[serde(rename = "type")]
@@ -30,6 +32,7 @@ pub struct SimpleMessage {
     pub client_msg_id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct BotMessage {
     #[serde(rename = "type")]
@@ -44,6 +47,7 @@ pub struct BotMessage {
     pub channel_type: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct PreviousMessage {
     #[serde(rename = "type")]
@@ -55,6 +59,7 @@ pub struct PreviousMessage {
     pub client_msg_id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct DeletedMessage {
     #[serde(rename = "type")]
@@ -69,6 +74,7 @@ pub struct DeletedMessage {
     pub previous_message: PreviousMessage,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum Message {
     Simple(SimpleMessage),
@@ -76,6 +82,7 @@ pub enum Message {
     Deleted(DeletedMessage),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct OuterEvent {
     pub token: String,
