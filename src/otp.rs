@@ -4,8 +4,8 @@ use regex::{Regex, RegexBuilder};
 
 use serde_derive::Serialize;
 
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::distr::Alphanumeric;
+use rand::{Rng, rng};
 use std::iter;
 use std::sync::LazyLock;
 
@@ -107,7 +107,7 @@ impl OtpValidator {
         &self,
         otp: &str,
     ) -> std::result::Result<std::result::Result<DecryptedOtp, OtpError>, Error> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let chars: String = iter::repeat(())
             .map(|()| -> char { rng.sample(Alphanumeric).into() })
             .take(40)
@@ -180,7 +180,7 @@ impl OtpValidator {
             None => {
                 return Err(actix_web::error::ErrorInternalServerError(
                     "Missing status in response",
-                ))
+                ));
             }
         };
 
@@ -211,7 +211,7 @@ impl OtpValidator {
             None => {
                 return Err(actix_web::error::ErrorInternalServerError(
                     "Missing timestamp in response",
-                ))
+                ));
             }
         };
 
@@ -227,7 +227,7 @@ impl OtpValidator {
             None => {
                 return Err(actix_web::error::ErrorInternalServerError(
                     "Missing sessioncounter in response",
-                ))
+                ));
             }
         };
 
@@ -243,7 +243,7 @@ impl OtpValidator {
             None => {
                 return Err(actix_web::error::ErrorInternalServerError(
                     "Missing sessionuse in response",
-                ))
+                ));
             }
         };
 

@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
-use actix::prelude::{Actor, Context, Handler, Message};
 use actix::AsyncContext;
+use actix::prelude::{Actor, Context, Handler, Message};
 use log::debug;
 
 use rand::prelude::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
 
 use crate::slack::PostMessageResponse;
 
@@ -193,7 +193,7 @@ impl RepliesSelectionActor {
     }
 
     fn shuffle(&mut self, msg_type: Reply) {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         match msg_type {
             Reply::SuccessNewDevice => {
